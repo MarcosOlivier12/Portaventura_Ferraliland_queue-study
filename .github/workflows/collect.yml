@@ -37,7 +37,7 @@ jobs:
         run: |
           python collector.py
 
-      - name: Save collected data
+            - name: Save collected data
         run: |
           git config user.name "PortAventura Queue Bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -46,7 +46,11 @@ jobs:
 
           if git diff --cached --quiet; then
             echo "No new data."
-          else
-            git commit -m "Collect queue data"
-            git push
+            exit 0
           fi
+
+          git commit -m "Collect queue data"
+
+          git pull --rebase origin main
+
+          git push origin main
