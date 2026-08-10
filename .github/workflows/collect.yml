@@ -1,15 +1,11 @@
 name: Collect PortAventura Queue Times
 
 on:
-  schedule:
-
-    # Cada 5 minutos durante la franja habitual de PortAventura
-    - cron: "*/5 9-21 * * *"
-
-    # Última hora
-    - cron: "*/5 22 * * *"
-
   workflow_dispatch:
+
+  schedule:
+    - cron: "*/5 8-20 * * *"
+    - cron: "*/5 21 * * *"
 
 permissions:
   contents: write
@@ -21,6 +17,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -37,7 +35,7 @@ jobs:
         run: |
           python collector.py
 
-            - name: Save collected data
+      - name: Save collected data
         run: |
           git config user.name "PortAventura Queue Bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
