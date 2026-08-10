@@ -1,24 +1,58 @@
 import os
 import requests
-import json
 
 API_KEY = os.environ["PARK_QUEUE_TIMES_API_KEY"]
 
 PARK_ID = 87
 
-url = f"https://api.parkqueuetimes.com/v1/parks/{PARK_ID}/live"
+URL = f"https://api.parkqueuetimes.com/v1/parks/{PARK_ID}/live"
 
-headers = {
+HEADERS = {
     "x-api-key": API_KEY,
     "User-Agent": "PortAventura-Queue-Study/1.0",
 }
 
-response = requests.get(url, headers=headers, timeout=30)
+TARGETS = [
+    "Uncharted",
+    "Street Mission",
+    "Shambhala",
+    "Dragon Khan",
+    "Furius Baco",
+    "Hurakan Condor",
+    "Stampida",
+    "Tutuki Splash",
+    "El Diablo",
+    "Silver River Flume",
+    "Templo del Fuego",
+    "Red Force",
+    "Thrill Towers",
+    "Flying Dreams",
+]
 
-print("STATUS:", response.status_code)
-print("ATRACCIONES DE PORT AVENTURA WORLD:")
-print("===================================")
+response = requests.get(URL, headers=HEADERS, timeout=30)
+response.raise_for_status()
 
-data = response.json()
+rides = response.json()["data"]["rides"]
 
-print(json.dumps(data, indent=2, ensure_ascii=False))
+print("RESULTADO DE LAS 14 ATRACCIONES")
+print("================================")
+
+for target in TARGETS:
+
+    matches = [
+        ride for ride in rides
+        if target.lower() in ride["name"].lower()
+        or ride["name"].lower() in target.lower()
+    ]
+
+    if matches:
+        for ride in matches:
+            print(
+                f"{target} -> "
+                f"NOMBRE API: {ride['name']} | "
+                f"ID: {ride['id']} | "
+                f"ESTADO: {ride['status']} | "
+                f"COLA: {ride['waitMinutes']}"
+            )
+    else:
+        print(f"{target} -> NO ENCONTRADA")
