@@ -10,8 +10,8 @@ BASE_URL = "https://api.parkqueuetimes.com/v1"
 TIMEZONE = ZoneInfo("Europe/Madrid")
 
 PARKS = {
-    "PortAventura": "portaventura-world",
-    "FerrariLand": "ferrari-land",
+    "PortAventura": "PortAventura Park",
+    "FerrariLand": "Ferrari Land",
 }
 
 TARGET_RIDES = {
