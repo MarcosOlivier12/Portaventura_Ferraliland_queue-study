@@ -1,7 +1,7 @@
 import csv
 import os
 import requests
-from datetime import datetime
+from datetime import datetime, time
 from zoneinfo import ZoneInfo
 from statistics import mean, median
 
@@ -24,6 +24,17 @@ HEADERS = {
     "x-api-key": API_KEY,
     "User-Agent": "PortAventura-Queue-Study/1.0",
 }
+
+
+# ============================================================
+# HORARIOS FIJOS - HORA MADRID
+# ============================================================
+
+PORTAVENTURA_OPENING = time(10, 30)
+PORTAVENTURA_CLOSING = time(23, 30)
+
+FERRARI_OPENING = time(17, 0)
+FERRARI_CLOSING = time(22, 0)
 
 
 # ============================================================
@@ -125,7 +136,7 @@ RIDES = [
 
 
 # ============================================================
-# FUNCIÓN GENERAL PARA LA API
+# API
 # ============================================================
 
 def api_get(endpoint):
@@ -190,96 +201,30 @@ def get_calendar_day(today):
             if day.get("date") == today:
                 return day
 
-    except Exception as e:
+    except Exception as error:
 
         print(
             "ERROR calendario:",
-            e
+            error
         )
 
     return {}
 
 
 # ============================================================
-# HORARIO DEL PARQUE
+# SABER SI UN PARQUE ESTÁ ABIERTO
 # ============================================================
 
-def get_schedule_day(today):
-
-    print("Consultando horario...")
-
-    try:
-
-        data = api_get("/schedule")
-
-        schedule = data.get(
-            "schedule",
-            []
-        )
-
-        for day in schedule:
-
-            if day.get("date") == today:
-                return day
-
-    except Exception as e:
-
-        print(
-            "ERROR horario:",
-            e
-        )
-
-    return {}
-
-
-# ============================================================
-# CONVERTIR FECHA/HORA
-# ============================================================
-
-def parse_datetime(value):
-
-    if not value:
-        return None
-
-    try:
-
-        return datetime.fromisoformat(
-            value
-        )
-
-    except Exception:
-
-        return None
-
-
-# ============================================================
-# SABER SI EL PARQUE ESTÁ ABIERTO
-# ============================================================
-
-def calculate_park_open(
-    now_madrid,
+def is_open(
+    current_time,
     opening,
     closing
 ):
 
-    opening_dt = parse_datetime(
-        opening
-    )
-
-    closing_dt = parse_datetime(
-        closing
-    )
-
-    if (
-        opening_dt is None
-        or closing_dt is None
-    ):
-        return None
-
     return (
-        opening_dt
-        <= now_madrid
-        <= closing_dt
+        opening
+        <= current_time
+        <= closing
     )
 
 
@@ -306,10 +251,6 @@ def calculate_observed_crowd(
         wait_times
     )
 
-    # -----------------------------------------
-    # NORMALIZACIÓN
-    # -----------------------------------------
-
     average_score = min(
         (average_wait / 120) * 100,
         100
@@ -325,10 +266,6 @@ def calculate_observed_crowd(
         100
     )
 
-    # -----------------------------------------
-    # ÍNDICE FINAL
-    # -----------------------------------------
-
     observed_index = (
         average_score * 0.45
         + median_score * 0.35
@@ -342,14 +279,14 @@ def calculate_observed_crowd(
 
 
 # ============================================================
-# RECOPILACIÓN PRINCIPAL
+# RECOPILACIÓN
 # ============================================================
 
 def collect():
 
-    # -----------------------------------------
+    # --------------------------------------------------------
     # HORA
-    # -----------------------------------------
+    # --------------------------------------------------------
 
     now_utc = datetime.now(
         UTC_TZ
@@ -371,6 +308,8 @@ def collect():
         now_madrid.date().isoformat()
     )
 
+    current_time = now_madrid.time()
+
     print(
         "=========================================="
     )
@@ -390,23 +329,53 @@ def collect():
         "=========================================="
     )
 
-    # -----------------------------------------
+    # --------------------------------------------------------
+    # ESTADO DE CADA PARQUE
+    # --------------------------------------------------------
+
+    portaventura_open = is_open(
+        current_time,
+        PORTAVENTURA_OPENING,
+        PORTAVENTURA_CLOSING
+    )
+
+    ferrari_land_open = is_open(
+        current_time,
+        FERRARI_OPENING,
+        FERRARI_CLOSING
+    )
+
+    print(
+        "PortAventura:",
+        "ABIERTO"
+        if portaventura_open
+        else "CERRADO"
+    )
+
+    print(
+        "Ferrari Land:",
+        "ABIERTO"
+        if ferrari_land_open
+        else "CERRADO"
+    )
+
+    print(
+        "Horario PortAventura: 10:30 - 23:30"
+    )
+
+    print(
+        "Horario Ferrari Land: 17:00 - 22:00"
+    )
+
+    # --------------------------------------------------------
     # API
-    # -----------------------------------------
+    # --------------------------------------------------------
 
     live_data = get_live_data()
 
     calendar_day = get_calendar_day(
         date_madrid
     )
-
-    schedule_day = get_schedule_day(
-        date_madrid
-    )
-
-    # -----------------------------------------
-    # AFLUENCIA PREVISTA
-    # -----------------------------------------
 
     crowd_forecast = (
         calendar_day.get(
@@ -419,46 +388,9 @@ def collect():
         crowd_forecast
     )
 
-    # -----------------------------------------
-    # HORARIO
-    # -----------------------------------------
-
-    opening_time = (
-        schedule_day.get(
-            "openingTime"
-        )
-    )
-
-    closing_time = (
-        schedule_day.get(
-            "closingTime"
-        )
-    )
-
-    print(
-        "Apertura:",
-        opening_time
-    )
-
-    print(
-        "Cierre:",
-        closing_time
-    )
-
-    park_open = calculate_park_open(
-        now_madrid,
-        opening_time,
-        closing_time
-    )
-
-    print(
-        "Parque abierto:",
-        park_open
-    )
-
-    # -----------------------------------------
+    # --------------------------------------------------------
     # ATRACCIONES
-    # -----------------------------------------
+    # --------------------------------------------------------
 
     collected = []
 
@@ -550,9 +482,9 @@ def collect():
             f"{wait_minutes} min"
         )
 
-    # -----------------------------------------
+    # --------------------------------------------------------
     # ESTADÍSTICAS
-    # -----------------------------------------
+    # --------------------------------------------------------
 
     rides_with_wait = len(
         wait_times
@@ -589,11 +521,8 @@ def collect():
     else:
 
         queue_mean = None
-
         queue_median = None
-
         queue_max = None
-
         observed_crowd_index = None
 
     print(
@@ -634,9 +563,9 @@ def collect():
         "------------------------------------------"
     )
 
-    # -----------------------------------------
-    # CREAR FILAS CSV
-    # -----------------------------------------
+    # --------------------------------------------------------
+    # CREAR FILAS
+    # --------------------------------------------------------
 
     rows = []
 
@@ -698,14 +627,23 @@ def collect():
             "rides_with_wait":
                 rides_with_wait,
 
-            "park_open":
-                park_open,
+            "portaventura_open":
+                portaventura_open,
 
-            "park_opening":
-                opening_time,
+            "ferrari_land_open":
+                ferrari_land_open,
 
-            "park_closing":
-                closing_time,
+            "portaventura_opening":
+                "10:30",
+
+            "portaventura_closing":
+                "23:30",
+
+            "ferrari_land_opening":
+                "17:00",
+
+            "ferrari_land_closing":
+                "22:00",
         }
 
         rows.append(
@@ -727,27 +665,39 @@ def save_rows(rows):
     )
 
     fieldnames = [
+
         "timestamp_utc",
         "timestamp_madrid",
         "date_madrid",
+
         "park",
         "code",
         "ride",
         "api_name",
         "ride_id",
+
         "status",
         "wait_minutes",
         "last_updated",
+
         "crowd_forecast",
         "observed_crowd_index",
+
         "queue_mean",
         "queue_median",
         "queue_max",
+
         "rides_operating",
         "rides_with_wait",
-        "park_open",
-        "park_opening",
-        "park_closing",
+
+        "portaventura_open",
+        "ferrari_land_open",
+
+        "portaventura_opening",
+        "portaventura_closing",
+
+        "ferrari_land_opening",
+        "ferrari_land_closing",
     ]
 
     file_exists = os.path.exists(
