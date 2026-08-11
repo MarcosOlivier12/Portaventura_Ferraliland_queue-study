@@ -2,7 +2,7 @@ name: Recoge los tiempos de cola de PortAventura
 
 on:
   schedule:
-    - cron: "7,37 * * * *"
+    - cron: "*/15 * * * *"
 
   workflow_dispatch:
 
@@ -16,7 +16,7 @@ jobs:
 
     steps:
 
-      - name: Descargar repositorio
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -24,34 +24,44 @@ jobs:
       - name: Configurar Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.x"
 
       - name: Instalar dependencias
         run: |
           pip install requests
 
+      - name: Comprobar horario de PortAventura
+        id: horario
+        run: |
+          HORA=$(TZ=Europe/Madrid date +%H:%M)
+
+          echo "Hora Madrid: $HORA"
+
+          if [[ "$HORA" > "10:29" && "$HORA" < "23:31" ]]; then
+            echo "dentro_horario=true" >> "$GITHUB_OUTPUT"
+            echo "PortAventura está dentro del horario de recopilación."
+          else
+            echo "dentro_horario=false" >> "$GITHUB_OUTPUT"
+            echo "Fuera del horario de recopilación."
+          fi
+
       - name: Recopilar datos
+        if: steps.horario.outputs.dentro_horario == 'true'
         env:
           PARK_QUEUE_TIMES_API_KEY: ${{ secrets.PARK_QUEUE_TIMES_API_KEY }}
         run: |
           python collector.py
 
       - name: Guardar datos en GitHub
+        if: steps.horario.outputs.dentro_horario == 'true'
         run: |
           git config user.name "PortAventura Queue Bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          if [ ! -f "data/queue_history.csv" ]; then
-            echo "No existe queue_history.csv."
-            echo "Probablemente ambos parques están cerrados."
-            echo "No hay nada que guardar."
-            exit 0
-          fi
+          git config user.email "bot@portaventura-queue-study.local"
 
           git add data/queue_history.csv
 
           if git diff --cached --quiet; then
-            echo "No hay datos nuevos para guardar."
+            echo "No hay cambios en queue_history.csv."
             exit 0
           fi
 
