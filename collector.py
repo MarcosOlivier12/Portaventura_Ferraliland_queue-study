@@ -174,7 +174,10 @@ def get_live_data():
 
     data = api_get("/live")
 
-    rides = data.get("rides", [])
+    rides = data.get(
+        "rides",
+        []
+    )
 
     return {
         int(ride["id"]): ride
@@ -188,17 +191,27 @@ def get_live_data():
 
 def get_calendar_day(today):
 
-    print("Consultando predicción de afluencia...")
+    print(
+        "Consultando predicción de afluencia..."
+    )
 
     try:
 
-        data = api_get("/calendar")
+        data = api_get(
+            "/calendar"
+        )
 
-        days = data.get("days", [])
+        days = data.get(
+            "days",
+            []
+        )
 
         for day in days:
 
-            if day.get("date") == today:
+            if day.get(
+                "date"
+            ) == today:
+
                 return day
 
     except Exception as error:
@@ -212,7 +225,7 @@ def get_calendar_day(today):
 
 
 # ============================================================
-# SABER SI UN PARQUE ESTÁ ABIERTO
+# HORARIO DE PARQUES
 # ============================================================
 
 def is_open(
@@ -229,7 +242,7 @@ def is_open(
 
 
 # ============================================================
-# ÍNDICE DE AFLUENCIA OBSERVADA
+# AFLUENCIA OBSERVADA
 # ============================================================
 
 def calculate_observed_crowd(
@@ -284,10 +297,6 @@ def calculate_observed_crowd(
 
 def collect():
 
-    # --------------------------------------------------------
-    # HORA
-    # --------------------------------------------------------
-
     now_utc = datetime.now(
         UTC_TZ
     )
@@ -330,7 +339,7 @@ def collect():
     )
 
     # --------------------------------------------------------
-    # ESTADO DE CADA PARQUE
+    # ESTADO DE LOS PARQUES
     # --------------------------------------------------------
 
     portaventura_open = is_open(
@@ -368,6 +377,25 @@ def collect():
     )
 
     # --------------------------------------------------------
+    # SI AMBOS PARQUES ESTÁN CERRADOS
+    # --------------------------------------------------------
+
+    if (
+        not portaventura_open
+        and not ferrari_land_open
+    ):
+
+        print(
+            "Ambos parques están cerrados."
+        )
+
+        print(
+            "No se realiza recopilación."
+        )
+
+        return []
+
+    # --------------------------------------------------------
     # API
     # --------------------------------------------------------
 
@@ -398,23 +426,45 @@ def collect():
 
     for ride_config in RIDES:
 
+        park = ride_config["park"]
+
         ride_id = ride_config["id"]
 
         ride = live_data.get(
             ride_id
         )
 
-        if ride is None:
+        # ------------------------------------
+        # ¿EL PARQUE DE ESTA ATRACCIÓN ESTÁ ABIERTO?
+        # ------------------------------------
 
-            print(
-                ride_config["code"],
-                "-> NOT_FOUND"
+        if park == "PortAventura":
+
+            park_is_open = (
+                portaventura_open
             )
 
+        else:
+
+            park_is_open = (
+                ferrari_land_open
+            )
+
+        # ------------------------------------
+        # ATRACCIÓN NO ENCONTRADA
+        # ------------------------------------
+
+        if ride is None:
+
             status = "NOT_FOUND"
+
             wait_minutes = None
+
             last_updated = None
+
             api_name = ""
+
+            ride_open = False
 
         else:
 
@@ -423,7 +473,7 @@ def collect():
                 ""
             )
 
-            status = ride.get(
+            api_status = ride.get(
                 "status",
                 "UNKNOWN"
             )
@@ -436,9 +486,42 @@ def collect():
                 "lastUpdated"
             )
 
-            if isinstance(
-                wait_minutes,
-                (int, float)
+            # --------------------------------
+            # ESTADO INDIVIDUAL
+            # --------------------------------
+
+            if not park_is_open:
+
+                status = "CLOSED_PARK"
+
+                ride_open = False
+
+                wait_minutes = None
+
+            elif api_status == "OPERATING":
+
+                status = "OPERATING"
+
+                ride_open = True
+
+            else:
+
+                status = api_status
+
+                ride_open = False
+
+                wait_minutes = None
+
+            # --------------------------------
+            # SOLO CONTAR COLAS VÁLIDAS
+            # --------------------------------
+
+            if (
+                ride_open
+                and isinstance(
+                    wait_minutes,
+                    (int, float)
+                )
             ):
 
                 wait_times.append(
@@ -447,10 +530,14 @@ def collect():
                     )
                 )
 
+        # ------------------------------------
+        # GUARDAR RESULTADO
+        # ------------------------------------
+
         collected.append(
             {
                 "park":
-                    ride_config["park"],
+                    park,
 
                 "code":
                     ride_config["code"],
@@ -467,6 +554,9 @@ def collect():
                 "status":
                     status,
 
+                "ride_open":
+                    ride_open,
+
                 "wait_minutes":
                     wait_minutes,
 
@@ -476,7 +566,7 @@ def collect():
         )
 
         print(
-            f"{ride_config['park']} | "
+            f"{park} | "
             f"{ride_config['code']} | "
             f"{status} | "
             f"{wait_minutes} min"
@@ -493,7 +583,7 @@ def collect():
     rides_operating = sum(
         1
         for ride in collected
-        if ride["status"] == "OPERATING"
+        if ride["ride_open"]
     )
 
     if wait_times:
@@ -521,8 +611,11 @@ def collect():
     else:
 
         queue_mean = None
+
         queue_median = None
+
         queue_max = None
+
         observed_crowd_index = None
 
     print(
@@ -564,7 +657,7 @@ def collect():
     )
 
     # --------------------------------------------------------
-    # CREAR FILAS
+    # CREAR FILAS CSV
     # --------------------------------------------------------
 
     rows = []
@@ -599,6 +692,9 @@ def collect():
 
             "status":
                 ride["status"],
+
+            "ride_open":
+                ride["ride_open"],
 
             "wait_minutes":
                 ride["wait_minutes"],
@@ -659,6 +755,14 @@ def collect():
 
 def save_rows(rows):
 
+    if not rows:
+
+        print(
+            "No hay registros que guardar."
+        )
+
+        return
+
     os.makedirs(
         "data",
         exist_ok=True
@@ -677,6 +781,7 @@ def save_rows(rows):
         "ride_id",
 
         "status",
+        "ride_open",
         "wait_minutes",
         "last_updated",
 
