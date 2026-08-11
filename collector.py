@@ -409,63 +409,145 @@ def get_crowd_forecast(
     )
 
     url = (
-    f"https://api.parkqueuetimes.com/v1/"
-    f"parks/{park_id}/calendar"
+        f"{PARKQUEUETIMES_BASE_URL}"
+        f"/parks/{park_id}/calendar"
     )
 
     headers = {
-    "Authorization": f"Bearer {PARKQUEUETIMES_API_KEY}",
-    "Accept": "application/json",
+        "Authorization": (
+            f"Bearer {PARKQUEUETIMES_API_KEY}"
+        ),
+        "Accept": "application/json",
+        "User-Agent": (
+            "PortAventura-Queue-Study/1.0"
+        ),
     }
+
+    if not PARKQUEUETIMES_API_KEY:
+        print(
+            "ERROR: no existe la variable "
+            "PARK_QUEUE_TIMES_API_KEY"
+        )
+        return None
+
     try:
 
         response = requests.get(
             url,
-            headers=QUEUE_TIMES_HEADERS,
+            headers=headers,
+            params={
+                "date": date_madrid
+            },
             timeout=30
         )
 
         response.raise_for_status()
 
-        html = response.text
-
-        # ----------------------------------------------------
-        # BUSCAR "Nivel de multitud"
-        # ----------------------------------------------------
-
-        import re
-
-        patterns = [
-            r"Nivel de multitud[^0-9]{0,100}(\d{1,3})\s*%",
-            r"crowd[^0-9]{0,100}(\d{1,3})\s*%",
-            r"crowd[^:]*:\s*(\d{1,3})",
-        ]
-
-        for pattern in patterns:
-
-            match = re.search(
-                pattern,
-                html,
-                re.IGNORECASE
-            )
-
-            if match:
-
-                crowd = float(
-                    match.group(1)
-                )
-
-                print(
-                    f"Afluencia encontrada "
-                    f"{park_name}: "
-                    f"{crowd:.0f}%"
-                )
-
-                return crowd
+        data = response.json()
 
         print(
-            f"No se encontró el nivel de multitud "
-            f"en Queue-Times para {park_name}"
+            f"Respuesta ParkQueueTimes "
+            f"{park_name}:",
+            data
+        )
+
+        # ----------------------------------------------------
+        # BUSCAR EL VALOR DE AFLUENCIA
+        # ----------------------------------------------------
+
+        if isinstance(data, dict):
+
+            possible_keys = [
+                "crowd",
+                "crowd_forecast",
+                "crowd_level",
+                "crowd_percentage",
+                "forecast",
+                "prediction",
+                "predicted_crowd",
+            ]
+
+            for key in possible_keys:
+
+                value = data.get(key)
+
+                if value is not None:
+
+                    try:
+
+                        crowd = float(value)
+
+                        print(
+                            f"Afluencia encontrada "
+                            f"{park_name}: "
+                            f"{crowd:.0f}%"
+                        )
+
+                        return crowd
+
+                    except (
+                        TypeError,
+                        ValueError
+                    ):
+                        pass
+
+        # ----------------------------------------------------
+        # SI LA API DEVUELVE UNA LISTA
+        # ----------------------------------------------------
+
+        if isinstance(data, list):
+
+            for item in data:
+
+                if not isinstance(item, dict):
+                    continue
+
+                item_date = (
+                    item.get("date")
+                    or item.get("day")
+                )
+
+                if (
+                    item_date
+                    and str(item_date) != date_madrid
+                ):
+                    continue
+
+                for key in [
+                    "crowd",
+                    "crowd_forecast",
+                    "crowd_level",
+                    "crowd_percentage",
+                    "forecast",
+                    "prediction",
+                ]:
+
+                    value = item.get(key)
+
+                    if value is not None:
+
+                        try:
+
+                            crowd = float(value)
+
+                            print(
+                                f"Afluencia encontrada "
+                                f"{park_name}: "
+                                f"{crowd:.0f}%"
+                            )
+
+                            return crowd
+
+                        except (
+                            TypeError,
+                            ValueError
+                        ):
+                            pass
+
+        print(
+            f"No se encontró el nivel de "
+            f"multitud en ParkQueueTimes "
+            f"para {park_name}"
         )
 
         return None
@@ -477,6 +559,39 @@ def get_crowd_forecast(
             f"afluencia {park_name}:",
             error
         )
+
+        # Mostrar respuesta del servidor.
+        # Esto es MUY útil para saber si la API
+        # está rechazando la clave o la petición.
+        try:
+
+            print(
+                "Respuesta servidor:",
+                response.text[:1000]
+            )
+
+        except Exception:
+            pass
+
+        return None
+
+    except ValueError as error:
+
+        print(
+            f"ERROR: ParkQueueTimes no devolvió "
+            f"JSON válido para {park_name}:",
+            error
+        )
+
+        try:
+
+            print(
+                "Respuesta servidor:",
+                response.text[:1000]
+            )
+
+        except Exception:
+            pass
 
         return None
 
