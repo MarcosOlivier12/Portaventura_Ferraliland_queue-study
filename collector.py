@@ -930,10 +930,10 @@ def collect():
     date_madrid
     )
 
-        ferrari_forecast = get_crowd_forecast(
-        PARKQUEUETIMES_FERRARI_ID,
-        "Ferrari Land",
-        date_madrid
+    ferrari_forecast = get_crowd_forecast(
+    PARKQUEUETIMES_FERRARI_ID,
+    "Ferrari Land",
+    date_madrid
     )
 
     print(
