@@ -408,64 +408,63 @@ def get_crowd_forecast(
         f"{park_name}..."
     )
 
-    if not PARKQUEUETIMES_API_KEY:
-
-        print(
-            "ERROR: PARK_QUEUE_TIMES_API_KEY "
-            "no está configurada."
-        )
-
-        return None
-
     url = (
-        f"{PARKQUEUETIMES_BASE_URL}"
-        f"/parks/{park_id}/calendar"
+        f"https://queue-times.com/parks/"
+        f"{park_id}/calendar/"
+        f"{date_madrid[:4]}/"
+        f"{date_madrid[5:7]}/"
+        f"{date_madrid[8:10]}"
     )
-
-    headers = {
-        "x-api-key": PARKQUEUETIMES_API_KEY,
-        "User-Agent": "PortAventura-Queue-Study/1.0",
-    }
 
     try:
 
         response = requests.get(
             url,
-            headers=headers,
+            headers=QUEUE_TIMES_HEADERS,
             timeout=30
         )
 
         response.raise_for_status()
 
-        result = response.json()
+        html = response.text
 
-        # ====================================================
-        # DEBUG TEMPORAL
-        # MOSTRAMOS LA RESPUESTA REAL DE LA API
-        # ====================================================
+        # ----------------------------------------------------
+        # BUSCAR "Nivel de multitud"
+        # ----------------------------------------------------
+
+        import re
+
+        patterns = [
+            r"Nivel de multitud[^0-9]{0,100}(\d{1,3})\s*%",
+            r"crowd[^0-9]{0,100}(\d{1,3})\s*%",
+            r"crowd[^:]*:\s*(\d{1,3})",
+        ]
+
+        for pattern in patterns:
+
+            match = re.search(
+                pattern,
+                html,
+                re.IGNORECASE
+            )
+
+            if match:
+
+                crowd = float(
+                    match.group(1)
+                )
+
+                print(
+                    f"Afluencia encontrada "
+                    f"{park_name}: "
+                    f"{crowd:.0f}%"
+                )
+
+                return crowd
 
         print(
-            f"\n========== RESPUESTA API {park_name} =========="
-        )
-
-        print(result)
-
-        print(
-            f"========== FIN RESPUESTA {park_name} ==========\n"
-        )
-
-        # ====================================================
-        # NO INTENTAMOS INTERPRETARLA TODAVÍA
-        # ====================================================
-
-        print(
-            f"Respuesta recibida correctamente para "
-            f"{park_name}."
-        )
-
-        print(
-            "Se muestra la respuesta completa arriba "
-            "para identificar el campo correcto."
+            f"No se encontró el nivel de multitud "
+            f"en Queue-Times para {park_name}"
         )
 
         return None
@@ -485,132 +484,6 @@ def get_crowd_forecast(
         print(
             f"ERROR obteniendo "
             f"afluencia {park_name}:",
-            error
-        )
-
-        return None
-
-        # ----------------------------------------------------
-        # RESPUESTA DIRECTA
-        # ----------------------------------------------------
-
-        if isinstance(data, dict):
-
-            for key in (
-                "crowd",
-                "crowd_percent",
-                "crowdPercent",
-                "percentage",
-                "percent",
-            ):
-
-                value = data.get(key)
-
-                if value is not None:
-
-                    try:
-                        return float(value)
-                    except (TypeError, ValueError):
-                        pass
-
-        # ----------------------------------------------------
-        # CALENDARIO COMO LISTA
-        # ----------------------------------------------------
-
-        if isinstance(data, list):
-
-            for day in data:
-
-                if not isinstance(day, dict):
-                    continue
-
-                day_date = str(
-                    day.get("date", "")
-                )
-
-                if day_date == date_madrid:
-
-                    for key in (
-                        "crowd",
-                        "crowd_percent",
-                        "crowdPercent",
-                        "percentage",
-                        "percent",
-                    ):
-
-                        value = day.get(key)
-
-                        if value is not None:
-
-                            try:
-                                return float(value)
-                            except (
-                                TypeError,
-                                ValueError
-                            ):
-                                pass
-
-        # ----------------------------------------------------
-        # CALENDARIO DENTRO DE DATA
-        # ----------------------------------------------------
-
-        if isinstance(data, dict):
-
-            possible_lists = [
-                data.get("calendar"),
-                data.get("days"),
-                data.get("data"),
-            ]
-
-            for days in possible_lists:
-
-                if not isinstance(days, list):
-                    continue
-
-                for day in days:
-
-                    if not isinstance(day, dict):
-                        continue
-
-                    day_date = str(
-                        day.get("date", "")
-                    )
-
-                    if day_date != date_madrid:
-                        continue
-
-                    for key in (
-                        "crowd",
-                        "crowd_percent",
-                        "crowdPercent",
-                        "percentage",
-                        "percent",
-                    ):
-
-                        value = day.get(key)
-
-                        if value is not None:
-
-                            try:
-                                return float(value)
-                            except (
-                                TypeError,
-                                ValueError
-                            ):
-                                pass
-
-        print(
-            f"No se encontró predicción "
-            f"para {park_name}"
-        )
-
-        return None
-
-    except Exception as error:
-
-        print(
-            f"ERROR obteniendo afluencia "
-            f"{park_name}:",
             error
         )
 
@@ -864,17 +737,18 @@ def collect():
     # AFLUENCIA POR PARQUE
     # --------------------------------------------------------
 
-    port_forecast = get_crowd_forecast(
-    PARKQUEUETIMES_PORTAVENTURA_ID,
-    "PortAventura",
-    date_madrid
+        port_forecast = get_crowd_forecast(
+        QUEUE_TIMES_PORTAVENTURA_ID,
+        "PortAventura",
+        date_madrid
     )
 
     ferrari_forecast = get_crowd_forecast(
-    PARKQUEUETIMES_FERRARI_ID,
-    "Ferrari Land",
-    date_madrid
+        QUEUE_TIMES_FERRARI_ID,
+        "Ferrari Land",
+        date_madrid
     )
+
 
     print(
         "Predicción afluencia PortAventura:",
