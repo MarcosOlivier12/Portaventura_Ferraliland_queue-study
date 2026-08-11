@@ -168,22 +168,58 @@ def api_get(endpoint):
 # TIEMPOS DE COLA
 # ============================================================
 
-def get_live_data():
 
-    print("Consultando tiempos de cola...")
+def get_queue_times():
+    """
+    Obtiene los tiempos de cola de PortAventura directamente
+    desde Queue-Times.
 
-    data = api_get("/live")
+    PortAventura Park = ID 19
+    """
 
-    rides = data.get(
-        "rides",
-        []
-    )
+    url = "https://queue-times.com/parks/19/queue_times.json"
 
-    return {
-        int(ride["id"]): ride
-        for ride in rides
-    }
+    try:
+        response = requests.get(url, timeout=20)
+        response.raise_for_status()
 
+        data = response.json()
+
+        rides = {}
+
+        # Queue-Times puede devolver atracciones directamente
+        # o dentro de lands.
+        all_rides = []
+
+        all_rides.extend(data.get("rides", []))
+
+        for land in data.get("lands", []):
+            all_rides.extend(land.get("rides", []))
+
+        for ride in all_rides:
+            ride_name = ride.get("name")
+
+            if not ride_name:
+                continue
+
+            rides[ride_name] = {
+                "id": ride.get("id"),
+                "status": (
+                    "OPERATING"
+                    if ride.get("is_open") is True
+                    else "CLOSED"
+                ),
+                "waitMinutes": ride.get("wait_time"),
+                "lastUpdated": ride.get("last_updated")
+            }
+
+        print(f"Queue-Times: recibidas {len(rides)} atracciones")
+
+        return rides
+
+    except Exception as e:
+        print(f"ERROR consultando Queue-Times: {e}")
+        return {}
 
 # ============================================================
 # PREDICCIÓN DE AFLUENCIA
