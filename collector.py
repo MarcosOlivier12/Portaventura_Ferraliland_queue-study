@@ -272,12 +272,19 @@ def get_queue_times(park_id):
 
 def get_crowd_level(park_id, date_madrid):
 
+    """
+    Obtiene la predicción de afluencia del día desde
+    el calendario mensual de Queue-Times.
+
+    PortAventura = 19
+    Ferrari Land = 277
+    """
+
     url = (
         f"https://queue-times.com/parks/"
         f"{park_id}/calendar/"
         f"{date_madrid.year}/"
-        f"{date_madrid.month:02d}/"
-        f"{date_madrid.day:02d}"
+        f"{date_madrid.month:02d}"
     )
 
     try:
@@ -292,21 +299,73 @@ def get_crowd_level(park_id, date_madrid):
 
         html = response.text
 
-        # Queue-Times muestra:
-        # Crowd level XX%
+        # ----------------------------------------------------
+        # Buscar el día concreto dentro del calendario.
+        #
+        # Queue-Times muestra las fechas como:
+        #
+        # 11 Tue 11 45%*
+        #
+        # o:
+        #
+        # 11 Tue 11 45%
+        #
+        # El asterisco significa que es una predicción.
+        # ----------------------------------------------------
+
+        day = date_madrid.day
+
+        pattern = (
+            rf"\b{day}\s+"
+            rf"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)"
+            rf"\s+{day}\s+"
+            rf"(\d+)%"
+        )
 
         match = re.search(
-            r"Crowd level\s+(\d+)%"
-            ,
+            pattern,
             html,
             re.IGNORECASE
         )
 
         if match:
 
-            return int(
+            crowd = int(
                 match.group(1)
             )
+
+            return crowd
+
+
+        # ----------------------------------------------------
+        # Segundo intento:
+        # buscar el día sin exigir dos veces el número.
+        # ----------------------------------------------------
+
+        pattern_fallback = (
+            rf"\b{day}\b.*?"
+            rf"(\d+)%"
+        )
+
+        matches = re.findall(
+            pattern_fallback,
+            html,
+            re.IGNORECASE
+        )
+
+        if matches:
+
+            # Tomamos el primer porcentaje encontrado
+            # asociado al día.
+            return int(
+                matches[0]
+            )
+
+
+        print(
+            f"No se encontró el día {day} "
+            f"en el calendario del parque {park_id}"
+        )
 
     except Exception as error:
 
