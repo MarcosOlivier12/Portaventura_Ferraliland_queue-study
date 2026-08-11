@@ -407,25 +407,147 @@ def get_crowd_forecast(
         f"{park_name}..."
     )
 
+    if not PARKQUEUETIMES_API_KEY:
+
+        print(
+            "ERROR: PARK_QUEUE_TIMES_API_KEY "
+            "no está configurada."
+        )
+
+        return None
+
     url = (
-        f"https://queue-times.com/parks/"
-        f"{park_id}/calendar/"
-        f"{date_madrid[:4]}/"
-        f"{date_madrid[5:7]}/"
-        f"{date_madrid[8:10]}"
+        f"{PARKQUEUETIMES_BASE_URL}"
+        f"/parks/{park_id}/calendar"
     )
+
+    headers = {
+        "x-api-key":
+            PARKQUEUETIMES_API_KEY,
+
+        "User-Agent":
+            "PortAventura-Queue-Study/1.0",
+    }
 
     try:
 
         response = requests.get(
             url,
-            timeout=30,
-            headers=QUEUE_TIMES_HEADERS
+            headers=headers,
+            timeout=30
         )
 
         response.raise_for_status()
 
-        data = response.json()
+        result = response.json()
+
+        if not result.get("success"):
+
+            print(
+                f"ERROR API ParkQueueTimes "
+                f"{park_name}:",
+                result.get(
+                    "error",
+                    "Error desconocido"
+                )
+            )
+
+            return None
+
+        data = result.get(
+            "data",
+            {}
+        )
+
+        days = data.get(
+            "days",
+            []
+        )
+
+        for day in days:
+
+            if not isinstance(
+                day,
+                dict
+            ):
+                continue
+
+            if str(
+                day.get("date", "")
+            ) != date_madrid:
+
+                continue
+
+            crowd = day.get(
+                "crowdPercent"
+            )
+
+            if crowd is None:
+
+                print(
+                    f"ParkQueueTimes no tiene "
+                    f"predicción para "
+                    f"{park_name} "
+                    f"({date_madrid})"
+                )
+
+                return None
+
+            try:
+
+                crowd = float(
+                    crowd
+                )
+
+                print(
+                    f"Afluencia encontrada "
+                    f"{park_name}: "
+                    f"{crowd:.0f}%"
+                )
+
+                return crowd
+
+            except (
+                TypeError,
+                ValueError
+            ):
+
+                print(
+                    f"Valor de afluencia "
+                    f"inválido para "
+                    f"{park_name}: "
+                    f"{crowd}"
+                )
+
+                return None
+
+        print(
+            f"No se encontró el día "
+            f"{date_madrid} en el calendario "
+            f"de {park_name}"
+        )
+
+        return None
+
+    except requests.HTTPError as error:
+
+        print(
+            f"ERROR HTTP obteniendo "
+            f"afluencia {park_name}:",
+            error
+        )
+
+        return None
+
+    except Exception as error:
+
+        print(
+            f"ERROR obteniendo "
+            f"afluencia {park_name}:",
+            error
+        )
+
+        return None
 
         # ----------------------------------------------------
         # RESPUESTA DIRECTA
