@@ -1,41 +1,42 @@
-name: Collect PortAventura Queue Times
+name: Recoge los tiempos de cola de PortAventura
 
 on:
-  workflow_dispatch:
-
   schedule:
-    - cron: "*/5 8-20 * * *"
-    - cron: "*/5 21 * * *"
+    - cron: "*/5 * * * *"
+
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  collect:
+  recolectar:
+
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+
+      - name: Descargar repositorio
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Python
+      - name: Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Instalar dependencias
         run: |
-          pip install -r requirements.txt
+          pip install requests
 
-      - name: Collect queue data
+      - name: Recopilar datos
         env:
           PARK_QUEUE_TIMES_API_KEY: ${{ secrets.PARK_QUEUE_TIMES_API_KEY }}
         run: |
           python collector.py
 
-      - name: Save collected data
+      - name: Guardar datos en GitHub
         run: |
           git config user.name "PortAventura Queue Bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -43,7 +44,7 @@ jobs:
           git add data/queue_history.csv
 
           if git diff --cached --quiet; then
-            echo "No new data."
+            echo "No hay datos nuevos para guardar."
             exit 0
           fi
 
