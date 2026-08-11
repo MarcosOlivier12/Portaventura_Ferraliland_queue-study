@@ -41,6 +41,13 @@ jobs:
           git config user.name "PortAventura Queue Bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          if [ ! -f "data/queue_history.csv" ]; then
+            echo "No existe queue_history.csv."
+            echo "Probablemente ambos parques están cerrados."
+            echo "No hay nada que guardar."
+            exit 0
+          fi
+
           git add data/queue_history.csv
 
           if git diff --cached --quiet; then
