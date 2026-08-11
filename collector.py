@@ -734,10 +734,10 @@ def collect():
     )
 
     # --------------------------------------------------------
-    # AFLUENCIA POR PARQUE
-    # --------------------------------------------------------
+# AFLUENCIA POR PARQUE
+# --------------------------------------------------------
 
-        port_forecast = get_crowd_forecast(
+    port_forecast = get_crowd_forecast(
         QUEUE_TIMES_PORTAVENTURA_ID,
         "PortAventura",
         date_madrid
@@ -749,7 +749,6 @@ def collect():
         date_madrid
     )
 
-
     print(
         "Predicción afluencia PortAventura:",
         port_forecast
@@ -759,8 +758,6 @@ def collect():
         "Predicción afluencia Ferrari Land:",
         ferrari_forecast
     )
-
-
     # --------------------------------------------------------
     # CONSTRUIR DATOS
     # --------------------------------------------------------
