@@ -414,14 +414,12 @@ def get_crowd_forecast(
     )
 
     headers = {
-        "Authorization": (
-            f"Bearer {PARKQUEUETIMES_API_KEY}"
-        ),
-        "Accept": "application/json",
-        "User-Agent": (
-            "PortAventura-Queue-Study/1.0"
-        ),
-    }
+    "x-api-key": PARKQUEUETIMES_API_KEY,
+    "Accept": "application/json",
+    "User-Agent": (
+        "PortAventura-Queue-Study/1.0"
+    ),
+}
 
     if not PARKQUEUETIMES_API_KEY:
         print(
