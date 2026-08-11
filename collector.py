@@ -289,9 +289,23 @@ def get_crowd_level(park_id, date_madrid):
 
     try:
 
+        print(
+            f"Consultando calendario Queue-Times "
+            f"parque {park_id}..."
+        )
+
         response = requests.get(
             url,
-            headers=HEADERS,
+            headers={
+                "User-Agent":
+                    "Mozilla/5.0 "
+                    "(Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) "
+                    "Chrome/131.0 Safari/537.36",
+                "Accept":
+                    "text/html,application/xhtml+xml"
+            },
             timeout=30
         )
 
@@ -299,24 +313,22 @@ def get_crowd_level(park_id, date_madrid):
 
         html = response.text
 
-        # ----------------------------------------------------
-        # Buscar el día concreto dentro del calendario.
-        #
-        # Queue-Times muestra las fechas como:
-        #
-        # 11 Tue 11 45%*
-        #
-        # o:
-        #
-        # 11 Tue 11 45%
-        #
-        # El asterisco significa que es una predicción.
-        # ----------------------------------------------------
-
         day = date_madrid.day
 
+        # ----------------------------------------------------
+        # Buscamos el enlace correspondiente al día.
+        #
+        # Ejemplo real:
+        #
+        # 11 Tue 11 86%* 🌻 10:30-23:30
+        #
+        # o para Ferrari:
+        #
+        # 11 Tue 11 86%* 🕔 17:00-22:30
+        # ----------------------------------------------------
+
         pattern = (
-            rf"\b{day}\s+"
+            rf">{day}\s+"
             rf"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)"
             rf"\s+{day}\s+"
             rf"(\d+)%"
@@ -334,37 +346,71 @@ def get_crowd_level(park_id, date_madrid):
                 match.group(1)
             )
 
-            return crowd
-
-
-        # ----------------------------------------------------
-        # Segundo intento:
-        # buscar el día sin exigir dos veces el número.
-        # ----------------------------------------------------
-
-        pattern_fallback = (
-            rf"\b{day}\b.*?"
-            rf"(\d+)%"
-        )
-
-        matches = re.findall(
-            pattern_fallback,
-            html,
-            re.IGNORECASE
-        )
-
-        if matches:
-
-            # Tomamos el primer porcentaje encontrado
-            # asociado al día.
-            return int(
-                matches[0]
+            print(
+                f"Afluencia encontrada parque "
+                f"{park_id}: {crowd}%"
             )
 
+            return crowd
+
+        # ----------------------------------------------------
+        # Segundo método:
+        #
+        # Buscamos todos los enlaces del calendario y
+        # comprobamos cuál corresponde al día.
+        # ----------------------------------------------------
+
+        links = re.findall(
+            r'<a[^>]+href="[^"]*"[^>]*>'
+            r'(.*?)'
+            r'</a>',
+            html,
+            re.IGNORECASE | re.DOTALL
+        )
+
+        for link_text in links:
+
+            # Eliminar etiquetas HTML
+            clean_text = re.sub(
+                r"<[^>]+>",
+                " ",
+                link_text
+            )
+
+            clean_text = re.sub(
+                r"\s+",
+                " ",
+                clean_text
+            ).strip()
+
+            # Buscar el día y un porcentaje
+            day_pattern = (
+                rf"\b{day}\b.*?"
+                rf"(\d+)%"
+            )
+
+            day_match = re.search(
+                day_pattern,
+                clean_text,
+                re.IGNORECASE
+            )
+
+            if day_match:
+
+                crowd = int(
+                    day_match.group(1)
+                )
+
+                print(
+                    f"Afluencia encontrada parque "
+                    f"{park_id}: {crowd}%"
+                )
+
+                return crowd
 
         print(
-            f"No se encontró el día {day} "
-            f"en el calendario del parque {park_id}"
+            f"No se encontró la predicción del día "
+            f"{day} para el parque {park_id}"
         )
 
     except Exception as error:
