@@ -23,6 +23,7 @@ PARKQUEUETIMES_BASE_URL = (
 )
 
 PARKQUEUETIMES_PORTAVENTURA_ID = 87
+PARKQUEUETIMES_FERRARI_ID = 88
 
 CSV_FILE = "data/queue_history.csv"
 
@@ -929,8 +930,8 @@ def collect():
     date_madrid
     )
 
-    ferrari_forecast = get_crowd_forecast(
-        QUEUE_TIMES_FERRARI_ID,
+        ferrari_forecast = get_crowd_forecast(
+        PARKQUEUETIMES_FERRARI_ID,
         "Ferrari Land",
         date_madrid
     )
