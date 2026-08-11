@@ -2,7 +2,9 @@ name: Recoge los tiempos de cola de PortAventura
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # GitHub usa UTC.
+    # 08:30 UTC = 10:30 hora Madrid en horario de verano.
+    - cron: "30 8 * * *"
 
   workflow_dispatch:
 
@@ -16,10 +18,18 @@ jobs:
 
     steps:
 
-      - name: Checkout
+      # ======================================================
+      # CHECKOUT
+      # ======================================================
+
+      - name: Descargar repositorio
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # ======================================================
+      # PYTHON
+      # ======================================================
 
       - name: Configurar Python
         uses: actions/setup-python@v5
@@ -30,43 +40,253 @@ jobs:
         run: |
           pip install requests
 
-      - name: Comprobar horario de PortAventura
-        id: horario
-        run: |
-          HORA=$(TZ=Europe/Madrid date +%H:%M)
+      # ======================================================
+      # RECOPILACIÓN CONTINUA
+      # ======================================================
 
-          echo "Hora Madrid: $HORA"
-
-          if [[ "$HORA" > "10:29" && "$HORA" < "23:31" ]]; then
-            echo "dentro_horario=true" >> "$GITHUB_OUTPUT"
-            echo "PortAventura está dentro del horario de recopilación."
-          else
-            echo "dentro_horario=false" >> "$GITHUB_OUTPUT"
-            echo "Fuera del horario de recopilación."
-          fi
-
-      - name: Recopilar datos
-        if: steps.horario.outputs.dentro_horario == 'true'
+      - name: Recopilar cada 15 minutos
         env:
           PARK_QUEUE_TIMES_API_KEY: ${{ secrets.PARK_QUEUE_TIMES_API_KEY }}
         run: |
-          python collector.py
 
-      - name: Guardar datos en GitHub
-        if: steps.horario.outputs.dentro_horario == 'true'
+          python3 <<'PY'
+
+          import subprocess
+          import time
+          import os
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          TZ = ZoneInfo("Europe/Madrid")
+
+          OPENING = 10 * 60 + 30
+          CLOSING = 23 * 60 + 30
+
+          def current_minutes():
+
+              now = datetime.now(TZ)
+
+              return (
+                  now.hour * 60
+                  + now.minute
+              )
+
+          print("==========================================")
+          print("PORTAVENTURA QUEUE STUDY")
+          print("SCHEDULER CONTINUO")
+          print("==========================================")
+
+          while True:
+
+              now = datetime.now(TZ)
+
+              current = (
+                  now.hour * 60
+                  + now.minute
+              )
+
+              print("")
+              print("------------------------------------------")
+              print(
+                  "Hora Madrid:",
+                  now.strftime(
+                      "%Y-%m-%d %H:%M:%S"
+                  )
+              )
+
+              # ==================================================
+              # ANTES DE LAS 10:30
+              # ==================================================
+
+              if current < OPENING:
+
+                  print(
+                      "Todavía no son las 10:30."
+                  )
+
+                  print(
+                      "Esperando..."
+                  )
+
+                  time.sleep(30)
+
+                  continue
+
+              # ==================================================
+              # DESPUÉS DE LAS 23:30
+              # ==================================================
+
+              if current >= CLOSING:
+
+                  print(
+                      "Son las 23:30 o más."
+                  )
+
+                  print(
+                      "Finalizando workflow."
+                  )
+
+                  break
+
+              # ==================================================
+              # EJECUTAR COLLECTOR
+              # ==================================================
+
+              print(
+                  "Ejecutando collector.py..."
+              )
+
+              result = subprocess.run(
+                  [
+                      "python",
+                      "collector.py"
+                  ],
+                  env=os.environ.copy()
+              )
+
+              if result.returncode == 0:
+
+                  print(
+                      "Collector ejecutado correctamente."
+                  )
+
+              else:
+
+                  print(
+                      "ERROR: collector.py terminó con código",
+                      result.returncode
+                  )
+
+              # ==================================================
+              # GUARDAR CSV INMEDIATAMENTE
+              # ==================================================
+
+              print(
+                  "Guardando datos en GitHub..."
+              )
+
+              subprocess.run(
+                  [
+                      "git",
+                      "config",
+                      "user.name",
+                      "PortAventura Queue Bot"
+                  ],
+                  check=True
+              )
+
+              subprocess.run(
+                  [
+                      "git",
+                      "config",
+                      "user.email",
+                      "bot@portaventura-queue-study.local"
+                  ],
+                  check=True
+              )
+
+              subprocess.run(
+                  [
+                      "git",
+                      "add",
+                      "data/queue_history.csv"
+                  ],
+                  check=False
+              )
+
+              status = subprocess.run(
+                  [
+                      "git",
+                      "diff",
+                      "--cached",
+                      "--quiet"
+                  ]
+              )
+
+              if status.returncode != 0:
+
+                  subprocess.run(
+                      [
+                          "git",
+                          "commit",
+                          "-m",
+                          "Collect queue data"
+                      ],
+                      check=True
+                  )
+
+                  subprocess.run(
+                      [
+                          "git",
+                          "pull",
+                          "--rebase",
+                          "origin",
+                          "main"
+                      ],
+                      check=True
+                  )
+
+                  subprocess.run(
+                      [
+                          "git",
+                          "push",
+                          "origin",
+                          "main"
+                      ],
+                      check=True
+
+                  )
+
+                  print(
+                      "Datos guardados correctamente."
+                  )
+
+              else:
+
+                  print(
+                      "No hay cambios nuevos que guardar."
+                  )
+
+              # ==================================================
+              # ESPERAR 15 MINUTOS
+              # ==================================================
+
+              print(
+                  "Esperando 15 minutos..."
+              )
+
+              for second in range(900):
+
+                  time.sleep(1)
+
+                  now = datetime.now(TZ)
+
+                  current = (
+                      now.hour * 60
+                      + now.minute
+                  )
+
+                  if current >= CLOSING:
+
+                      print(
+                          "Se alcanzó el horario de cierre."
+                      )
+
+                      print(
+                          "Finalizando workflow."
+                      )
+
+                      raise SystemExit(0)
+
+          PY
+
+      # ======================================================
+      # FINAL
+      # ======================================================
+
+      - name: Workflow terminado
+        if: always()
         run: |
-          git config user.name "PortAventura Queue Bot"
-          git config user.email "bot@portaventura-queue-study.local"
-
-          git add data/queue_history.csv
-
-          if git diff --cached --quiet; then
-            echo "No hay cambios en queue_history.csv."
-            exit 0
-          fi
-
-          git commit -m "Collect queue data"
-
-          git pull --rebase origin main
-
-          git push origin main
+          echo "=========================================="
+          echo "RECOPILACIÓN DIARIA FINALIZADA"
+          echo "=========================================="
