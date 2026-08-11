@@ -1,6 +1,5 @@
 import csv
 import os
-import re
 import requests
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
@@ -11,18 +10,20 @@ from statistics import mean, median
 # CONFIGURACIÓN
 # ============================================================
 
+API_KEY = os.environ["PARK_QUEUE_TIMES_API_KEY"]
+
 MADRID_TZ = ZoneInfo("Europe/Madrid")
 UTC_TZ = ZoneInfo("UTC")
 
 CSV_FILE = "data/queue_history.csv"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; PortAventura-Queue-Study/1.0)"
+    "User-Agent": "PortAventura-Queue-Study/1.0",
 }
 
 
 # ============================================================
-# PARQUES
+# PARQUES QUEUE-TIMES
 # ============================================================
 
 PARKS = {
@@ -41,7 +42,7 @@ PARKS = {
 
 
 # ============================================================
-# ATRACCIONES QUE QUEREMOS ESTUDIAR
+# ATRACCIONES
 # ============================================================
 
 RIDES = [
@@ -52,66 +53,77 @@ RIDES = [
         "park": "PortAventura",
         "code": "UNCH",
         "name": "Uncharted",
+        "id": 5614,
     },
 
     {
         "park": "PortAventura",
         "code": "SM",
         "name": "Street Mission",
+        "id": 5652,
     },
 
     {
         "park": "PortAventura",
         "code": "SH",
         "name": "Shambhala",
+        "id": 5603,
     },
 
     {
         "park": "PortAventura",
         "code": "DK",
         "name": "Dragon Khan",
+        "id": 5630,
     },
 
     {
         "park": "PortAventura",
         "code": "FB",
         "name": "Furius Baco",
+        "id": 5596,
     },
 
     {
         "park": "PortAventura",
         "code": "HC",
         "name": "Hurakan Condor",
+        "id": 5644,
     },
 
     {
         "park": "PortAventura",
         "code": "STAM",
         "name": "Stampida",
+        "id": 5608,
     },
 
     {
         "park": "PortAventura",
         "code": "TK",
         "name": "Tutuki Splash",
+        "id": 5649,
     },
 
     {
         "park": "PortAventura",
         "code": "DB",
         "name": "El Diablo - Tren De La Mina",
+        "id": 5645,
     },
 
     {
         "park": "PortAventura",
         "code": "SVR",
         "name": "Silver River Flume",
+        "id": 5646,
     },
 
     {
         "park": "PortAventura",
         "code": "TF",
         "name": "Templo del Fuego",
+        "id": 5591,
     },
 
 
@@ -121,67 +133,105 @@ RIDES = [
         "park": "Ferrari Land",
         "code": "RF",
         "name": "Red Force",
+        "id": 5612,
     },
 
     {
         "park": "Ferrari Land",
         "code": "TT",
         "name": "Thrill Towers",
+        "id": 5590,
     },
 
     {
         "park": "Ferrari Land",
         "code": "FLY",
         "name": "Flying Dreams",
+        "id": 5611,
     },
 ]
 
 
 # ============================================================
-# FUNCIONES AUXILIARES
+# COLUMNAS CSV
 # ============================================================
 
-def normalize_name(name):
-    """
-    Normaliza nombres para poder comparar los nombres de nuestra
-    lista con los nombres devueltos por Queue-Times.
-    """
+FIELDNAMES = [
 
-    if not name:
-        return ""
+    "timestamp_utc",
+    "timestamp_madrid",
+    "date_madrid",
 
-    name = name.lower().strip()
+    "park",
+    "code",
+    "ride",
+    "api_name",
+    "ride_id",
 
-    replacements = {
-        "á": "a",
-        "é": "e",
-        "í": "i",
-        "ó": "o",
-        "ú": "u",
-        "ü": "u",
-        "ñ": "n",
-    }
+    "status",
+    "ride_open",
+    "wait_minutes",
+    "last_updated",
 
-    for old, new in replacements.items():
-        name = name.replace(old, new)
+    "crowd_forecast",
+    "observed_crowd_index",
 
-    name = re.sub(
-        r"[^a-z0-9]+",
-        " ",
-        name
-    )
+    "queue_mean",
+    "queue_median",
+    "queue_max",
 
-    return " ".join(
-        name.split()
-    )
+    "rides_operating",
+    "rides_with_wait",
+
+    "portaventura_open",
+    "ferrari_land_open",
+
+    "portaventura_opening",
+    "portaventura_closing",
+
+    "ferrari_land_opening",
+    "ferrari_land_closing",
+]
 
 
-def is_open(current_time, opening, closing):
-    return (
-        opening
-        <= current_time
-        <= closing
-    )
+# ============================================================
+# VALIDACIÓN DE COLUMNAS
+# ============================================================
+
+EXPECTED_COLUMNS = len(FIELDNAMES)
+
+
+def validate_row(row):
+
+    missing = [
+        field
+        for field in FIELDNAMES
+        if field not in row
+    ]
+
+    extra = [
+        field
+        for field in row
+        if field not in FIELDNAMES
+    ]
+
+    if missing:
+        raise ValueError(
+            "Faltan columnas: "
+            + ", ".join(missing)
+        )
+
+    if extra:
+        raise ValueError(
+            "Columnas desconocidas: "
+            + ", ".join(extra)
+        )
+
+    if len(row) != EXPECTED_COLUMNS:
+        raise ValueError(
+            f"La fila tiene {len(row)} columnas. "
+            f"Se esperaban {EXPECTED_COLUMNS}."
+        )
 
 
 # ============================================================
@@ -191,243 +241,255 @@ def is_open(current_time, opening, closing):
 def get_queue_times(park_id):
 
     url = (
-        f"https://queue-times.com/parks/"
-        f"{park_id}/queue_times.json"
-    )
-
-    response = requests.get(
-        url,
-        headers=HEADERS,
-        timeout=30
-    )
-
-    response.raise_for_status()
-
-    data = response.json()
-
-    rides = []
-
-    rides.extend(
-        data.get(
-            "rides",
-            []
-        )
-    )
-
-    for land in data.get(
-        "lands",
-        []
-    ):
-
-        rides.extend(
-            land.get(
-                "rides",
-                []
-            )
-        )
-
-    result = {}
-
-    for ride in rides:
-
-        name = ride.get(
-            "name"
-        )
-
-        if not name:
-            continue
-
-        normalized = normalize_name(
-            name
-        )
-
-        result[normalized] = {
-            "name":
-                name,
-
-            "id":
-                ride.get("id"),
-
-            "is_open":
-                ride.get("is_open"),
-
-            "wait_time":
-                ride.get("wait_time"),
-
-            "last_updated":
-                ride.get("last_updated"),
-        }
-
-    print(
-        f"Queue-Times parque {park_id}: "
-        f"recibidas {len(result)} atracciones"
-    )
-
-    return result
-
-
-# ============================================================
-# PREDICCIÓN / NIVEL DE AFLUENCIA
-# ============================================================
-
-def get_crowd_level(park_id, date_madrid):
-
-    """
-    Obtiene la predicción de afluencia del día desde
-    el calendario mensual de Queue-Times.
-
-    PortAventura = 19
-    Ferrari Land = 277
-    """
-
-    url = (
-        f"https://queue-times.com/parks/"
-        f"{park_id}/calendar/"
-        f"{date_madrid.year}/"
-        f"{date_madrid.month:02d}"
+        f"https://queue-times.com/"
+        f"parks/{park_id}/queue_times.json"
     )
 
     try:
 
         print(
-            f"Consultando calendario Queue-Times "
-            f"parque {park_id}..."
+            f"Consultando Queue-Times parque {park_id}..."
         )
 
         response = requests.get(
             url,
-            headers={
-                "User-Agent":
-                    "Mozilla/5.0 "
-                    "(Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) "
-                    "Chrome/131.0 Safari/537.36",
-                "Accept":
-                    "text/html,application/xhtml+xml"
-            },
-            timeout=30
+            headers=HEADERS,
+            timeout=30,
         )
 
         response.raise_for_status()
 
-        html = response.text
+        data = response.json()
 
-        day = date_madrid.day
+        rides = {}
 
-        # ----------------------------------------------------
-        # Buscamos el enlace correspondiente al día.
-        #
-        # Ejemplo real:
-        #
-        # 11 Tue 11 86%* 🌻 10:30-23:30
-        #
-        # o para Ferrari:
-        #
-        # 11 Tue 11 86%* 🕔 17:00-22:30
-        # ----------------------------------------------------
+        all_rides = []
 
-        pattern = (
-            rf">{day}\s+"
-            rf"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)"
-            rf"\s+{day}\s+"
-            rf"(\d+)%"
+        all_rides.extend(
+            data.get("rides", [])
         )
 
-        match = re.search(
-            pattern,
-            html,
-            re.IGNORECASE
-        )
+        for land in data.get(
+            "lands",
+            []
+        ):
 
-        if match:
-
-            crowd = int(
-                match.group(1)
-            )
-
-            print(
-                f"Afluencia encontrada parque "
-                f"{park_id}: {crowd}%"
-            )
-
-            return crowd
-
-        # ----------------------------------------------------
-        # Segundo método:
-        #
-        # Buscamos todos los enlaces del calendario y
-        # comprobamos cuál corresponde al día.
-        # ----------------------------------------------------
-
-        links = re.findall(
-            r'<a[^>]+href="[^"]*"[^>]*>'
-            r'(.*?)'
-            r'</a>',
-            html,
-            re.IGNORECASE | re.DOTALL
-        )
-
-        for link_text in links:
-
-            # Eliminar etiquetas HTML
-            clean_text = re.sub(
-                r"<[^>]+>",
-                " ",
-                link_text
-            )
-
-            clean_text = re.sub(
-                r"\s+",
-                " ",
-                clean_text
-            ).strip()
-
-            # Buscar el día y un porcentaje
-            day_pattern = (
-                rf"\b{day}\b.*?"
-                rf"(\d+)%"
-            )
-
-            day_match = re.search(
-                day_pattern,
-                clean_text,
-                re.IGNORECASE
-            )
-
-            if day_match:
-
-                crowd = int(
-                    day_match.group(1)
+            all_rides.extend(
+                land.get(
+                    "rides",
+                    []
                 )
+            )
 
-                print(
-                    f"Afluencia encontrada parque "
-                    f"{park_id}: {crowd}%"
-                )
+        for ride in all_rides:
 
-                return crowd
+            ride_name = ride.get(
+                "name"
+            )
+
+            if not ride_name:
+                continue
+
+            rides[
+                ride_name
+            ] = {
+                "id":
+                    ride.get("id"),
+
+                "name":
+                    ride_name,
+
+                "status":
+                    (
+                        "OPERATING"
+                        if ride.get(
+                            "is_open"
+                        ) is True
+                        else "CLOSED"
+                    ),
+
+                "waitMinutes":
+                    ride.get(
+                        "wait_time"
+                    ),
+
+                "lastUpdated":
+                    ride.get(
+                        "last_updated"
+                    ),
+            }
 
         print(
-            f"No se encontró la predicción del día "
-            f"{day} para el parque {park_id}"
+            f"Queue-Times parque {park_id}: "
+            f"recibidas {len(rides)} atracciones"
+        )
+
+        return rides
+
+    except Exception as error:
+
+        print(
+            f"ERROR Queue-Times parque {park_id}:",
+            error
+        )
+
+        return {}
+
+
+# ============================================================
+# BUSCAR ATRACCIÓN POR ID
+# ============================================================
+
+def find_ride(live_data, ride_id):
+
+    for ride in live_data.values():
+
+        if ride.get("id") == ride_id:
+            return ride
+
+    return None
+
+
+# ============================================================
+# AFLUENCIA
+# ============================================================
+
+def get_crowd_forecast(park_id, date_string):
+
+    print(
+        f"Consultando calendario Queue-Times "
+        f"parque {park_id}..."
+    )
+
+    url = (
+        f"https://queue-times.com/"
+        f"parks/{park_id}/calendar/"
+        f"{date_string[:4]}/"
+        f"{date_string[5:7]}/"
+        f"{date_string[8:10]}"
+    )
+
+    try:
+
+        response = requests.get(
+            url,
+            headers=HEADERS,
+            timeout=30,
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        # ----------------------------------------------------
+        # FORMATO DIRECTO
+        # ----------------------------------------------------
+
+        if isinstance(
+            data,
+            dict
+        ):
+
+            for key in (
+                "crowd",
+                "crowd_percent",
+                "crowdPercent",
+                "percentage",
+                "percent",
+            ):
+
+                value = data.get(key)
+
+                if value is not None:
+
+                    print(
+                        f"Afluencia encontrada parque "
+                        f"{park_id}: {value}%"
+                    )
+
+                    return value
+
+        # ----------------------------------------------------
+        # LISTA DE DÍAS
+        # ----------------------------------------------------
+
+        if isinstance(
+            data,
+            list
+        ):
+
+            for day in data:
+
+                if not isinstance(
+                    day,
+                    dict
+                ):
+                    continue
+
+                day_date = (
+                    day.get("date")
+                    or day.get("day")
+                )
+
+                if day_date == date_string:
+
+                    value = (
+                        day.get("crowd")
+                        or day.get("crowd_percent")
+                        or day.get("crowdPercent")
+                        or day.get("percentage")
+                        or day.get("percent")
+                    )
+
+                    if value is not None:
+
+                        print(
+                            f"Afluencia encontrada parque "
+                            f"{park_id}: {value}%"
+                        )
+
+                        return value
+
+        print(
+            f"No se encontró afluencia "
+            f"para parque {park_id}"
         )
 
     except Exception as error:
 
         print(
             f"ERROR obteniendo afluencia "
-            f"del parque {park_id}: {error}"
+            f"del parque {park_id}:",
+            error
         )
 
     return None
 
 
 # ============================================================
-# ESTADÍSTICAS
+# HORARIO
 # ============================================================
 
-def calculate_observed_crowd(wait_times):
+def is_open(
+    current_time,
+    opening,
+    closing
+):
+
+    return (
+        opening
+        <= current_time
+        < closing
+    )
+
+
+# ============================================================
+# ÍNDICE DE AFLUENCIA OBSERVADO
+# ============================================================
+
+def calculate_observed_crowd(
+    wait_times
+):
 
     if not wait_times:
         return None
@@ -445,23 +507,35 @@ def calculate_observed_crowd(wait_times):
     )
 
     average_score = min(
-        (average_wait / 120) * 100,
+        (
+            average_wait
+            / 120
+        ) * 100,
         100
     )
 
     median_score = min(
-        (median_wait / 120) * 100,
+        (
+            median_wait
+            / 120
+        ) * 100,
         100
     )
 
     maximum_score = min(
-        (maximum_wait / 180) * 100,
+        (
+            maximum_wait
+            / 180
+        ) * 100,
         100
     )
 
     observed_index = (
+
         average_score * 0.45
+
         + median_score * 0.35
+
         + maximum_score * 0.20
     )
 
@@ -494,10 +568,12 @@ def collect():
     )
 
     date_madrid = (
-        now_madrid.date()
+        now_madrid.date().isoformat()
     )
 
-    current_time = now_madrid.time()
+    current_time = (
+        now_madrid.time()
+    )
 
     print(
         "=========================================="
@@ -518,30 +594,43 @@ def collect():
         "=========================================="
     )
 
+    # --------------------------------------------------------
+    # HORARIOS
+    # --------------------------------------------------------
 
-    # ========================================================
-    # ESTADO DE LOS PARQUES
-    # ========================================================
+    portaventura_open = is_open(
+        current_time,
+        PARKS[
+            "PortAventura"
+        ]["opening"],
+        PARKS[
+            "PortAventura"
+        ]["closing"]
+    )
 
-    park_states = {}
+    ferrari_land_open = is_open(
+        current_time,
+        PARKS[
+            "Ferrari Land"
+        ]["opening"],
+        PARKS[
+            "Ferrari Land"
+        ]["closing"]
+    )
 
-    for park_name, park_config in PARKS.items():
+    print(
+        "PortAventura:",
+        "ABIERTO"
+        if portaventura_open
+        else "CERRADO"
+    )
 
-        opened = is_open(
-            current_time,
-            park_config["opening"],
-            park_config["closing"]
-        )
-
-        park_states[
-            park_name
-        ] = opened
-
-        print(
-            f"{park_name}: "
-            f"{'ABIERTO' if opened else 'CERRADO'}"
-        )
-
+    print(
+        "Ferrari Land:",
+        "ABIERTO"
+        if ferrari_land_open
+        else "CERRADO"
+    )
 
     print(
         "Horario PortAventura: 10:30 - 23:30"
@@ -551,13 +640,13 @@ def collect():
         "Horario Ferrari Land: 17:00 - 22:00"
     )
 
+    # --------------------------------------------------------
+    # SI AMBOS ESTÁN CERRADOS
+    # --------------------------------------------------------
 
-    # ========================================================
-    # SI LOS DOS ESTÁN CERRADOS
-    # ========================================================
-
-    if not any(
-        park_states.values()
+    if (
+        not portaventura_open
+        and not ferrari_land_open
     ):
 
         print(
@@ -570,91 +659,96 @@ def collect():
 
         return []
 
+    # --------------------------------------------------------
+    # QUEUE-TIMES
+    # --------------------------------------------------------
 
-    # ========================================================
-    # CONSULTAR QUEUE-TIMES POR SEPARADO
-    # ========================================================
-
-    print(
-        "Consultando Queue-Times..."
+    portaventura_data = get_queue_times(
+        PARKS[
+            "PortAventura"
+        ]["queue_times_id"]
     )
 
-    queue_data = {}
-
-    for park_name, park_config in PARKS.items():
-
-        # Solo necesitamos consultar el parque si está abierto.
-        # Si está cerrado, guardaremos CLOSED_PARK.
-        if park_states[park_name]:
-
-            try:
-
-                queue_data[
-                    park_name
-                ] = get_queue_times(
-                    park_config[
-                        "queue_times_id"
-                    ]
-                )
-
-            except Exception as error:
-
-                print(
-                    f"ERROR Queue-Times "
-                    f"{park_name}: {error}"
-                )
-
-                queue_data[
-                    park_name
-                ] = {}
-
-        else:
-
-            queue_data[
-                park_name
-            ] = {}
-
-
-    # ========================================================
-    # AFLUENCIA INDEPENDIENTE DE CADA PARQUE
-    # ========================================================
-
-    print(
-        "Consultando predicción de afluencia..."
+    ferrari_data = get_queue_times(
+        PARKS[
+            "Ferrari Land"
+        ]["queue_times_id"]
     )
 
-    crowd_forecasts = {}
+    # --------------------------------------------------------
+    # AFLUENCIA
+    # --------------------------------------------------------
 
-    for park_name, park_config in PARKS.items():
+    portaventura_forecast = None
+    ferrari_forecast = None
 
-        crowd = get_crowd_level(
-            park_config[
-                "queue_times_id"
-            ],
-            date_madrid
+    if portaventura_open:
+
+        portaventura_forecast = (
+            get_crowd_forecast(
+                19,
+                date_madrid
+            )
         )
 
-        crowd_forecasts[
-            park_name
-        ] = crowd
+    if ferrari_land_open:
 
-        print(
-            f"Predicción afluencia "
-            f"{park_name}: {crowd}"
+        ferrari_forecast = (
+            get_crowd_forecast(
+                277,
+                date_madrid
+            )
         )
 
+    print(
+        "Predicción afluencia PortAventura:",
+        portaventura_forecast
+    )
 
-    # ========================================================
+    print(
+        "Predicción afluencia Ferrari Land:",
+        ferrari_forecast
+    )
+
+    # --------------------------------------------------------
+    # DATOS POR PARQUE
+    # --------------------------------------------------------
+
+    park_data = {
+        "PortAventura":
+            portaventura_data,
+
+        "Ferrari Land":
+            ferrari_data,
+    }
+
+    park_open = {
+        "PortAventura":
+            portaventura_open,
+
+        "Ferrari Land":
+            ferrari_land_open,
+    }
+
+    park_forecast = {
+        "PortAventura":
+            portaventura_forecast,
+
+        "Ferrari Land":
+            ferrari_forecast,
+    }
+
+    # --------------------------------------------------------
+    # PRIMERA PASADA:
     # RECOPILAR ATRACCIONES
-    # ========================================================
+    # --------------------------------------------------------
 
     collected = []
 
-    park_wait_times = {
+    wait_times_by_park = {
         "PortAventura": [],
         "Ferrari Land": [],
     }
-
 
     for ride_config in RIDES:
 
@@ -662,39 +756,32 @@ def collect():
             "park"
         ]
 
-        code = ride_config[
-            "code"
+        ride_id = ride_config[
+            "id"
         ]
 
-        requested_name = ride_config[
-            "name"
-        ]
-
-        normalized_requested = normalize_name(
-            requested_name
-        )
-
-        park_is_open = park_states[
+        live_data = park_data[
             park
         ]
 
-        source = queue_data.get(
-            park,
-            {}
+        ride = find_ride(
+            live_data,
+            ride_id
         )
 
-        ride = source.get(
-            normalized_requested
-        )
-
+        park_is_open = park_open[
+            park
+        ]
 
         # ----------------------------------------------------
-        # PARQUE CERRADO
+        # NO ENCONTRADA
         # ----------------------------------------------------
 
-        if not park_is_open:
+        if ride is None:
 
-            status = "CLOSED_PARK"
+            status = (
+                "SOURCE_NOT_AVAILABLE"
+            )
 
             ride_open = False
 
@@ -703,45 +790,6 @@ def collect():
             last_updated = None
 
             api_name = ""
-
-
-        # ----------------------------------------------------
-        # PARQUE ABIERTO PERO FUENTE NO DISPONIBLE
-        # ----------------------------------------------------
-
-        elif not source:
-
-            status = "SOURCE_NOT_AVAILABLE"
-
-            ride_open = False
-
-            wait_minutes = None
-
-            last_updated = None
-
-            api_name = ""
-
-
-        # ----------------------------------------------------
-        # ATRACCIÓN NO ENCONTRADA
-        # ----------------------------------------------------
-
-        elif ride is None:
-
-            status = "NOT_FOUND"
-
-            ride_open = False
-
-            wait_minutes = None
-
-            last_updated = None
-
-            api_name = ""
-
-
-        # ----------------------------------------------------
-        # ATRACCIÓN ENCONTRADA
-        # ----------------------------------------------------
 
         else:
 
@@ -750,106 +798,100 @@ def collect():
                 ""
             )
 
+            api_status = ride.get(
+                "status",
+                "UNKNOWN"
+            )
+
             wait_minutes = ride.get(
-                "wait_time"
+                "waitMinutes"
             )
 
             last_updated = ride.get(
-                "last_updated"
+                "lastUpdated"
             )
 
-            ride_is_open = (
-                ride.get(
-                    "is_open"
-                )
-                is True
-            )
+            # ------------------------------------------------
+            # PARQUE CERRADO
+            # ------------------------------------------------
 
+            if not park_is_open:
 
-            if ride_is_open:
-
-                status = "OPERATING"
-
-                ride_open = True
-
-            else:
-
-                status = "CLOSED"
+                status = "CLOSED_PARK"
 
                 ride_open = False
 
                 wait_minutes = None
 
+            # ------------------------------------------------
+            # ATRACCIÓN OPERATIVA
+            # ------------------------------------------------
+
+            elif api_status == "OPERATING":
+
+                status = "OPERATING"
+
+                ride_open = True
 
             # ------------------------------------------------
-            # GUARDAR TIEMPOS VÁLIDOS
+            # OTROS ESTADOS
             # ------------------------------------------------
 
-            if (
-                ride_open
-                and isinstance(
-                    wait_minutes,
-                    (int, float)
+            else:
+
+                status = api_status
+
+                ride_open = False
+
+                wait_minutes = None
+
+        # ----------------------------------------------------
+        # GUARDAR COLA VÁLIDA
+        # ----------------------------------------------------
+
+        if (
+            ride_open
+            and isinstance(
+                wait_minutes,
+                (int, float)
+            )
+        ):
+
+            wait_times_by_park[
+                park
+            ].append(
+                float(
+                    wait_minutes
                 )
-            ):
-
-                park_wait_times[
-                    park
-                ].append(
-                    float(
-                        wait_minutes
-                    )
-                )
-
-
-        print(
-            f"{park} | "
-            f"{code} | "
-            f"{status} | "
-            f"{wait_minutes} min"
-        )
-
+            )
 
         collected.append(
             {
-                "park":
-                    park,
-
-                "code":
-                    code,
-
-                "ride":
-                    requested_name,
-
-                "api_name":
-                    api_name,
-
-                "status":
-                    status,
-
-                "ride_open":
-                    ride_open,
-
-                "wait_minutes":
-                    wait_minutes,
-
-                "last_updated":
-                    last_updated,
+                "park": park,
+                "code": ride_config["code"],
+                "ride": ride_config["name"],
+                "api_name": api_name,
+                "ride_id": ride_id,
+                "status": status,
+                "ride_open": ride_open,
+                "wait_minutes": wait_minutes,
+                "last_updated": last_updated,
             }
         )
 
-
-    # ========================================================
+    # --------------------------------------------------------
     # ESTADÍSTICAS POR PARQUE
-    # ========================================================
+    # --------------------------------------------------------
 
-    park_statistics = {}
+    statistics = {}
 
+    for park in (
+        "PortAventura",
+        "Ferrari Land"
+    ):
 
-    for park_name in PARKS:
-
-        waits = park_wait_times[
-            park_name
+        waits = wait_times_by_park[
+            park
         ]
 
         if waits:
@@ -868,7 +910,7 @@ def collect():
                 waits
             )
 
-            observed_crowd = (
+            observed = (
                 calculate_observed_crowd(
                     waits
                 )
@@ -877,34 +919,26 @@ def collect():
         else:
 
             queue_mean = None
-
             queue_median = None
-
             queue_max = None
-
-            observed_crowd = None
-
+            observed = None
 
         rides_operating = sum(
             1
             for ride in collected
             if (
-                ride["park"]
-                == park_name
+                ride["park"] == park
                 and ride["ride_open"]
             )
         )
-
 
         rides_with_wait = len(
             waits
         )
 
-
-        park_statistics[
-            park_name
+        statistics[
+            park
         ] = {
-
             "queue_mean":
                 queue_mean,
 
@@ -914,33 +948,44 @@ def collect():
             "queue_max":
                 queue_max,
 
+            "observed":
+                observed,
+
             "rides_operating":
                 rides_operating,
 
             "rides_with_wait":
                 rides_with_wait,
-
-            "observed_crowd":
-                observed_crowd,
         }
 
+    # --------------------------------------------------------
+    # MOSTRAR RESULTADOS
+    # --------------------------------------------------------
 
-    # ========================================================
-    # MOSTRAR ESTADÍSTICAS
-    # ========================================================
+    for ride in collected:
 
-    for park_name in PARKS:
+        print(
+            f"{ride['park']} | "
+            f"{ride['code']} | "
+            f"{ride['status']} | "
+            f"{ride['wait_minutes']} min"
+        )
 
-        stats = park_statistics[
-            park_name
+    print(
+        "------------------------------------------"
+    )
+
+    for park in (
+        "PortAventura",
+        "Ferrari Land"
+    ):
+
+        stats = statistics[
+            park
         ]
 
         print(
-            "------------------------------------------"
-        )
-
-        print(
-            park_name
+            park
         )
 
         print(
@@ -970,16 +1015,18 @@ def collect():
 
         print(
             "Índice de afluencia observado:",
-            stats["observed_crowd"]
+            stats["observed"]
         )
 
+        print(
+            "------------------------------------------"
+        )
 
-    # ========================================================
+    # --------------------------------------------------------
     # CREAR FILAS CSV
-    # ========================================================
+    # --------------------------------------------------------
 
     rows = []
-
 
     for ride in collected:
 
@@ -987,7 +1034,7 @@ def collect():
             "park"
         ]
 
-        stats = park_statistics[
+        stats = statistics[
             park
         ]
 
@@ -1000,7 +1047,7 @@ def collect():
                 timestamp_madrid,
 
             "date_madrid":
-                date_madrid.isoformat(),
+                date_madrid,
 
             "park":
                 park,
@@ -1013,6 +1060,9 @@ def collect():
 
             "api_name":
                 ride["api_name"],
+
+            "ride_id":
+                ride["ride_id"],
 
             "status":
                 ride["status"],
@@ -1027,64 +1077,66 @@ def collect():
                 ride["last_updated"],
 
             "crowd_forecast":
-                crowd_forecasts[
+                park_forecast[
                     park
                 ],
 
             "observed_crowd_index":
-                stats[
-                    "observed_crowd"
-                ],
+                stats["observed"],
 
             "queue_mean":
-                stats[
-                    "queue_mean"
-                ],
+                stats["queue_mean"],
 
             "queue_median":
-                stats[
-                    "queue_median"
-                ],
+                stats["queue_median"],
 
             "queue_max":
-                stats[
-                    "queue_max"
-                ],
+                stats["queue_max"],
 
             "rides_operating":
-                stats[
-                    "rides_operating"
-                ],
+                stats["rides_operating"],
 
             "rides_with_wait":
-                stats[
-                    "rides_with_wait"
-                ],
+                stats["rides_with_wait"],
 
-            "park_open":
-                park_states[
-                    park
-                ],
+            "portaventura_open":
+                portaventura_open,
 
-            "park_opening":
-                PARKS[
-                    park
-                ]["opening"].strftime(
-                    "%H:%M"
-                ),
+            "ferrari_land_open":
+                ferrari_land_open,
 
-            "park_closing":
-                PARKS[
-                    park
-                ]["closing"].strftime(
-                    "%H:%M"
-                ),
+            "portaventura_opening":
+                "10:30",
+
+            "portaventura_closing":
+                "23:30",
+
+            "ferrari_land_opening":
+                "17:00",
+
+            "ferrari_land_closing":
+                "22:00",
         }
+
+        # ----------------------------------------------------
+        # VALIDACIÓN
+        # ----------------------------------------------------
+
+        validate_row(
+            row
+        )
 
         rows.append(
             row
         )
 
+    print(
+        f"Filas preparadas: {len(rows)}"
+    )
+
+    print(
+        f"Columnas por fila: {EXPECTED_COLUMNS}"
+    )
 
     return rows
 
@@ -1103,49 +1155,70 @@ def save_rows(rows):
 
         return
 
+    # --------------------------------------------------------
+    # VALIDAR TODAS LAS FILAS ANTES DE TOCAR EL CSV
+    # --------------------------------------------------------
+
+    for index, row in enumerate(
+        rows,
+        start=1
+    ):
+
+        validate_row(
+            row
+        )
+
+        if len(row) != EXPECTED_COLUMNS:
+
+            raise ValueError(
+                f"Fila {index}: "
+                f"{len(row)} columnas "
+                f"en lugar de "
+                f"{EXPECTED_COLUMNS}."
+            )
 
     os.makedirs(
         "data",
         exist_ok=True
     )
 
-
-    fieldnames = [
-
-        "timestamp_utc",
-        "timestamp_madrid",
-        "date_madrid",
-
-        "park",
-        "code",
-        "ride",
-        "api_name",
-
-        "status",
-        "ride_open",
-        "wait_minutes",
-        "last_updated",
-
-        "crowd_forecast",
-        "observed_crowd_index",
-
-        "queue_mean",
-        "queue_median",
-        "queue_max",
-
-        "rides_operating",
-        "rides_with_wait",
-
-        "park_open",
-        "park_opening",
-        "park_closing",
-    ]
-
-
     file_exists = os.path.exists(
         CSV_FILE
     )
 
+    # --------------------------------------------------------
+    # SI EXISTE, COMPROBAR CABECERA
+    # --------------------------------------------------------
+
+    if file_exists:
+
+        with open(
+            CSV_FILE,
+            "r",
+            newline="",
+            encoding="utf-8"
+        ) as file:
+
+            reader = csv.reader(
+                file
+            )
+
+            header = next(
+                reader,
+                None
+            )
+
+            if header != FIELDNAMES:
+
+                raise ValueError(
+                    "La cabecera del CSV "
+                    "no coincide con la estructura "
+                    "actual de 25 columnas."
+                )
+
+    # --------------------------------------------------------
+    # ESCRIBIR
+    # --------------------------------------------------------
 
     with open(
         CSV_FILE,
@@ -1156,22 +1229,25 @@ def save_rows(rows):
 
         writer = csv.DictWriter(
             file,
-            fieldnames=fieldnames
+            fieldnames=FIELDNAMES,
+            extrasaction="raise"
         )
-
 
         if not file_exists:
 
             writer.writeheader()
 
-
         writer.writerows(
             rows
         )
 
-
     print(
         f"Guardados {len(rows)} registros."
+    )
+
+    print(
+        f"Estructura validada: "
+        f"{EXPECTED_COLUMNS} columnas."
     )
 
 
