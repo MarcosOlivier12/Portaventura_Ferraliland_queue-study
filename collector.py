@@ -409,13 +409,14 @@ def get_crowd_forecast(
     )
 
     url = (
-        f"https://queue-times.com/parks/"
-        f"{park_id}/calendar/"
-        f"{date_madrid[:4]}/"
-        f"{date_madrid[5:7]}/"
-        f"{date_madrid[8:10]}"
+    f"https://api.parkqueuetimes.com/v1/"
+    f"parks/{park_id}/calendar"
     )
 
+    headers = {
+    "Authorization": f"Bearer {PARKQUEUETIMES_API_KEY}",
+    "Accept": "application/json",
+    }
     try:
 
         response = requests.get(
