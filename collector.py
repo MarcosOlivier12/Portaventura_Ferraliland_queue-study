@@ -408,38 +408,59 @@ def get_crowd_forecast(
         f"{park_name}..."
     )
 
+    # ParkQueueTimes espera YYYY-MM, NO YYYY-MM-DD
+    month_madrid = str(date_madrid)[:7]
+
     url = (
-        f"{PARKQUEUETIMES_BASE_URL}"
-        f"/parks/{park_id}/calendar"
+        f"https://api.parkqueuetimes.com/v1/"
+        f"parks/{park_id}/calendar"
     )
 
     headers = {
-    "x-api-key": PARKQUEUETIMES_API_KEY,
-    "Accept": "application/json",
-    "User-Agent": (
-        "PortAventura-Queue-Study/1.0"
-    ),
-}
+        "x-api-key": PARKQUEUETIMES_API_KEY,
+        "Accept": "application/json",
+        "User-Agent": (
+            "PortAventura-Queue-Study/1.0"
+        ),
+    }
 
-    if not PARKQUEUETIMES_API_KEY:
-        print(
-            "ERROR: no existe la variable "
-            "PARK_QUEUE_TIMES_API_KEY"
-        )
-        return None
+    params = {
+        "date": month_madrid
+    }
 
     try:
+
+        if not PARKQUEUETIMES_API_KEY:
+
+            print(
+                "ERROR: PARK_QUEUE_TIMES_API_KEY "
+                "no está configurada."
+            )
+
+            return None
 
         response = requests.get(
             url,
             headers=headers,
-            params={
-                "date": date_madrid
-            },
+            params=params,
             timeout=30
         )
 
-        response.raise_for_status()
+        # Mostrar respuesta en caso de error
+        if not response.ok:
+
+            print(
+                f"ERROR HTTP obteniendo "
+                f"afluencia {park_name}: "
+                f"{response.status_code}"
+            )
+
+            print(
+                "Respuesta servidor:",
+                response.text
+            )
+
+            return None
 
         data = response.json()
 
@@ -449,147 +470,19 @@ def get_crowd_forecast(
             data
         )
 
-        # ----------------------------------------------------
-        # BUSCAR EL VALOR DE AFLUENCIA
-        # ----------------------------------------------------
-
-        if isinstance(data, dict):
-
-            possible_keys = [
-                "crowd",
-                "crowd_forecast",
-                "crowd_level",
-                "crowd_percentage",
-                "forecast",
-                "prediction",
-                "predicted_crowd",
-            ]
-
-            for key in possible_keys:
-
-                value = data.get(key)
-
-                if value is not None:
-
-                    try:
-
-                        crowd = float(value)
-
-                        print(
-                            f"Afluencia encontrada "
-                            f"{park_name}: "
-                            f"{crowd:.0f}%"
-                        )
-
-                        return crowd
-
-                    except (
-                        TypeError,
-                        ValueError
-                    ):
-                        pass
-
-        # ----------------------------------------------------
-        # SI LA API DEVUELVE UNA LISTA
-        # ----------------------------------------------------
-
-        if isinstance(data, list):
-
-            for item in data:
-
-                if not isinstance(item, dict):
-                    continue
-
-                item_date = (
-                    item.get("date")
-                    or item.get("day")
-                )
-
-                if (
-                    item_date
-                    and str(item_date) != date_madrid
-                ):
-                    continue
-
-                for key in [
-                    "crowd",
-                    "crowd_forecast",
-                    "crowd_level",
-                    "crowd_percentage",
-                    "forecast",
-                    "prediction",
-                ]:
-
-                    value = item.get(key)
-
-                    if value is not None:
-
-                        try:
-
-                            crowd = float(value)
-
-                            print(
-                                f"Afluencia encontrada "
-                                f"{park_name}: "
-                                f"{crowd:.0f}%"
-                            )
-
-                            return crowd
-
-                        except (
-                            TypeError,
-                            ValueError
-                        ):
-                            pass
-
-        print(
-            f"No se encontró el nivel de "
-            f"multitud en ParkQueueTimes "
-            f"para {park_name}"
+        return extract_crowd_forecast(
+            data,
+            park_name,
+            date_madrid
         )
 
-        return None
-
-    except requests.HTTPError as error:
+    except requests.RequestException as error:
 
         print(
             f"ERROR HTTP obteniendo "
             f"afluencia {park_name}:",
             error
         )
-
-        # Mostrar respuesta del servidor.
-        # Esto es MUY útil para saber si la API
-        # está rechazando la clave o la petición.
-        try:
-
-            print(
-                "Respuesta servidor:",
-                response.text[:1000]
-            )
-
-        except Exception:
-            pass
-
-        return None
-
-    except ValueError as error:
-
-        print(
-            f"ERROR: ParkQueueTimes no devolvió "
-            f"JSON válido para {park_name}:",
-            error
-        )
-
-        try:
-
-            print(
-                "Respuesta servidor:",
-                response.text[:1000]
-            )
-
-        except Exception:
-            pass
 
         return None
 
@@ -602,7 +495,6 @@ def get_crowd_forecast(
         )
 
         return None
-
 # ============================================================
 # ESTADÍSTICAS
 # ============================================================
