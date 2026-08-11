@@ -423,11 +423,8 @@ def get_crowd_forecast(
     )
 
     headers = {
-        "x-api-key":
-            PARKQUEUETIMES_API_KEY,
-
-        "User-Agent":
-            "PortAventura-Queue-Study/1.0",
+        "x-api-key": PARKQUEUETIMES_API_KEY,
+        "User-Agent": "PortAventura-Queue-Study/1.0",
     }
 
     try:
@@ -442,90 +439,33 @@ def get_crowd_forecast(
 
         result = response.json()
 
-        if not result.get("success"):
-
-            print(
-                f"ERROR API ParkQueueTimes "
-                f"{park_name}:",
-                result.get(
-                    "error",
-                    "Error desconocido"
-                )
-            )
-
-            return None
-
-        data = result.get(
-            "data",
-            {}
-        )
-
-        days = data.get(
-            "days",
-            []
-        )
-
-        for day in days:
-
-            if not isinstance(
-                day,
-                dict
-            ):
-                continue
-
-            if str(
-                day.get("date", "")
-            ) != date_madrid:
-
-                continue
-
-            crowd = day.get(
-                "crowdPercent"
-            )
-
-            if crowd is None:
-
-                print(
-                    f"ParkQueueTimes no tiene "
-                    f"predicción para "
-                    f"{park_name} "
-                    f"({date_madrid})"
-                )
-
-                return None
-
-            try:
-
-                crowd = float(
-                    crowd
-                )
-
-                print(
-                    f"Afluencia encontrada "
-                    f"{park_name}: "
-                    f"{crowd:.0f}%"
-                )
-
-                return crowd
-
-            except (
-                TypeError,
-                ValueError
-            ):
-
-                print(
-                    f"Valor de afluencia "
-                    f"inválido para "
-                    f"{park_name}: "
-                    f"{crowd}"
-                )
-
-                return None
+        # ====================================================
+        # DEBUG TEMPORAL
+        # MOSTRAMOS LA RESPUESTA REAL DE LA API
+        # ====================================================
 
         print(
-            f"No se encontró el día "
-            f"{date_madrid} en el calendario "
-            f"de {park_name}"
+            f"\n========== RESPUESTA API {park_name} =========="
+        )
+
+        print(result)
+
+        print(
+            f"========== FIN RESPUESTA {park_name} ==========\n"
+        )
+
+        # ====================================================
+        # NO INTENTAMOS INTERPRETARLA TODAVÍA
+        # ====================================================
+
+        print(
+            f"Respuesta recibida correctamente para "
+            f"{park_name}."
+        )
+
+        print(
+            "Se muestra la respuesta completa arriba "
+            "para identificar el campo correcto."
         )
 
         return None
