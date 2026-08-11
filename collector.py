@@ -738,13 +738,13 @@ def collect():
 # --------------------------------------------------------
 
     port_forecast = get_crowd_forecast(
-        QUEUE_TIMES_PORTAVENTURA_ID,
+        PARKQUEUETIMES_PORTAVENTURA_ID,
         "PortAventura",
         date_madrid
     )
 
     ferrari_forecast = get_crowd_forecast(
-        QUEUE_TIMES_FERRARI_ID,
+        PARKQUEUETIMES_FERRARI_ID,
         "Ferrari Land",
         date_madrid
     )
