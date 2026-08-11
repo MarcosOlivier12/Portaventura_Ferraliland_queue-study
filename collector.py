@@ -14,6 +14,16 @@ from statistics import mean, median
 QUEUE_TIMES_PORTAVENTURA_ID = 19
 QUEUE_TIMES_FERRARI_ID = 277
 
+PARKQUEUETIMES_API_KEY = os.environ.get(
+    "PARK_QUEUE_TIMES_API_KEY"
+)
+
+PARKQUEUETIMES_BASE_URL = (
+    "https://api.parkqueuetimes.com/v1"
+)
+
+PARKQUEUETIMES_PORTAVENTURA_ID = 87
+
 CSV_FILE = "data/queue_history.csv"
 
 MADRID_TZ = ZoneInfo("Europe/Madrid")
