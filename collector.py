@@ -15,8 +15,9 @@ QUEUE_TIMES_PORTAVENTURA_ID = 19
 QUEUE_TIMES_FERRARI_ID = 277
 
 PARKQUEUETIMES_API_KEY = os.environ.get(
-    "PARK_QUEUE_TIMES_API_KEY"
-)
+    "PARK_QUEUE_TIMES_API_KEY",
+    ""
+).strip()
 
 PARKQUEUETIMES_BASE_URL = (
     "https://api.parkqueuetimes.com/v1"
@@ -136,7 +137,6 @@ RIDES = [
         "id": 5591,
     },
 
-
     # --------------------------------------------------------
     # FERRARI LAND
     # --------------------------------------------------------
@@ -202,7 +202,15 @@ FIELDNAMES = [
 # ============================================================
 
 def is_open(current_time, opening, closing):
-    return opening <= current_time <= closing
+    """
+    El cierre se considera exclusivo.
+
+    Ejemplo:
+    23:29:59 -> abierto
+    23:30:00 -> cerrado
+    """
+
+    return opening <= current_time < closing
 
 
 def normalize_name(name):
@@ -263,7 +271,7 @@ def get_queue_times_for_park(park_id, park_name):
         if isinstance(rides_direct, list):
             all_rides.extend(rides_direct)
 
-        # Y otras las contienen dentro de "lands".
+        # Otras las contienen dentro de "lands".
         lands = data.get("lands", [])
 
         if isinstance(lands, list):
@@ -397,6 +405,147 @@ def find_ride(source, config):
 # PREDICCIÓN DE AFLUENCIA
 # ============================================================
 
+def extract_crowd_forecast(
+    data,
+    park_name,
+    date_madrid
+):
+    """
+    Extrae la predicción exacta del día solicitado.
+
+    Respuesta esperada de ParkQueueTimes:
+
+    {
+        "success": true,
+        "data": {
+            "days": [
+                {
+                    "date": "2026-08-11",
+                    "crowdPercent": 44
+                }
+            ]
+        }
+    }
+    """
+
+    if not isinstance(data, dict):
+        print(
+            f"Respuesta inválida de ParkQueueTimes "
+            f"para {park_name}"
+        )
+        return None
+
+    if data.get("success") is False:
+
+        print(
+            f"ParkQueueTimes devolvió success=false "
+            f"para {park_name}: "
+            f"{data.get('error')}"
+        )
+
+        return None
+
+    payload = data.get(
+        "data",
+        {}
+    )
+
+    if not isinstance(payload, dict):
+        print(
+            f"Estructura 'data' inválida para "
+            f"{park_name}"
+        )
+        return None
+
+    days = payload.get(
+        "days",
+        []
+    )
+
+    if not isinstance(days, list):
+
+        print(
+            f"No existe una lista 'days' válida "
+            f"para {park_name}"
+        )
+
+        return None
+
+    target_date = str(
+        date_madrid
+    )
+
+    for day in days:
+
+        if not isinstance(day, dict):
+            continue
+
+        day_date = day.get(
+            "date"
+        )
+
+        if str(day_date) != target_date:
+            continue
+
+        crowd = day.get(
+            "crowdPercent"
+        )
+
+        if crowd is None:
+
+            print(
+                f"ParkQueueTimes no tiene "
+                f"predicción para "
+                f"{park_name} el "
+                f"{target_date}"
+            )
+
+            return None
+
+        try:
+
+            crowd = float(crowd)
+
+        except (
+            TypeError,
+            ValueError
+        ):
+
+            print(
+                f"crowdPercent inválido para "
+                f"{park_name}: {crowd}"
+            )
+
+            return None
+
+        crowd = max(
+            0.0,
+            min(
+                crowd,
+                100.0
+            )
+        )
+
+        print(
+            f"Afluencia encontrada "
+            f"{park_name}: "
+            f"{crowd:.0f}%"
+        )
+
+        return round(
+            crowd,
+            1
+        )
+
+    print(
+        f"No se encontró la fecha "
+        f"{target_date} en el calendario "
+        f"de {park_name}"
+    )
+
+    return None
+
+
 def get_crowd_forecast(
     park_id,
     park_name,
@@ -408,11 +557,22 @@ def get_crowd_forecast(
         f"{park_name}..."
     )
 
-    # ParkQueueTimes espera YYYY-MM, NO YYYY-MM-DD
-    month_madrid = str(date_madrid)[:7]
+    if not PARKQUEUETIMES_API_KEY:
+
+        print(
+            "ERROR: PARK_QUEUE_TIMES_API_KEY "
+            "no está configurada."
+        )
+
+        return None
+
+    # ParkQueueTimes espera YYYY-MM.
+    month_madrid = str(
+        date_madrid
+    )[:7]
 
     url = (
-        f"https://api.parkqueuetimes.com/v1/"
+        f"{PARKQUEUETIMES_BASE_URL}/"
         f"parks/{park_id}/calendar"
     )
 
@@ -430,15 +590,6 @@ def get_crowd_forecast(
 
     try:
 
-        if not PARKQUEUETIMES_API_KEY:
-
-            print(
-                "ERROR: PARK_QUEUE_TIMES_API_KEY "
-                "no está configurada."
-            )
-
-            return None
-
         response = requests.get(
             url,
             headers=headers,
@@ -446,7 +597,6 @@ def get_crowd_forecast(
             timeout=30
         )
 
-        # Mostrar respuesta en caso de error
         if not response.ok:
 
             print(
@@ -455,20 +605,23 @@ def get_crowd_forecast(
                 f"{response.status_code}"
             )
 
-            print(
-                "Respuesta servidor:",
-                response.text
-            )
+            try:
+
+                print(
+                    "Respuesta servidor:",
+                    response.json()
+                )
+
+            except ValueError:
+
+                print(
+                    "Respuesta servidor:",
+                    response.text
+                )
 
             return None
 
         data = response.json()
-
-        print(
-            f"Respuesta ParkQueueTimes "
-            f"{park_name}:",
-            data
-        )
 
         return extract_crowd_forecast(
             data,
@@ -486,6 +639,16 @@ def get_crowd_forecast(
 
         return None
 
+    except ValueError as error:
+
+        print(
+            f"ERROR JSON obteniendo "
+            f"afluencia {park_name}:",
+            error
+        )
+
+        return None
+
     except Exception as error:
 
         print(
@@ -495,6 +658,8 @@ def get_crowd_forecast(
         )
 
         return None
+
+
 # ============================================================
 # ESTADÍSTICAS
 # ============================================================
@@ -561,6 +726,8 @@ def calculate_statistics(rows):
 
             value = float(value)
 
+            # 0 minutos es un dato válido para calcular
+            # la media, por lo que NO se elimina aquí.
             wait_times.append(
                 value
             )
@@ -578,8 +745,12 @@ def calculate_statistics(rows):
         if row["ride_open"]
     )
 
-    rides_with_wait = len(
-        wait_times
+    # Solo consideramos "con cola" las que tienen
+    # más de 0 minutos.
+    rides_with_wait = sum(
+        1
+        for value in wait_times
+        if value > 0
     )
 
     if not wait_times:
@@ -705,7 +876,7 @@ def collect():
     )
 
     # --------------------------------------------------------
-    # FUERA DEL HORARIO DE PORTAVENTURA
+    # FUERA DEL HORARIO
     # --------------------------------------------------------
 
     if not portaventura_open:
@@ -739,8 +910,8 @@ def collect():
     )
 
     # --------------------------------------------------------
-# AFLUENCIA POR PARQUE
-# --------------------------------------------------------
+    # AFLUENCIA POR PARQUE
+    # --------------------------------------------------------
 
     port_forecast = get_crowd_forecast(
         PARKQUEUETIMES_PORTAVENTURA_ID,
@@ -763,6 +934,7 @@ def collect():
         "Predicción afluencia Ferrari Land:",
         ferrari_forecast
     )
+
     # --------------------------------------------------------
     # CONSTRUIR DATOS
     # --------------------------------------------------------
@@ -801,9 +973,16 @@ def collect():
                 ""
             )
 
+            # Compatibilidad con diferentes
+            # nomenclaturas de API.
             last_updated = ride.get(
                 "last_updated"
             )
+
+            if last_updated is None:
+                last_updated = ride.get(
+                    "lastUpdated"
+                )
 
             if not park_open:
 
@@ -813,6 +992,7 @@ def collect():
 
                 is_operating = (
                     ride.get("is_open") is True
+                    or ride.get("status") == "OPERATING"
                 )
 
                 if is_operating:
@@ -823,6 +1003,11 @@ def collect():
                     wait_minutes = ride.get(
                         "wait_time"
                     )
+
+                    if wait_minutes is None:
+                        wait_minutes = ride.get(
+                            "waitMinutes"
+                        )
 
                 else:
 
@@ -841,6 +1026,7 @@ def collect():
                 "last_updated": last_updated,
             }
         )
+
     # --------------------------------------------------------
     # ESTADÍSTICAS
     # --------------------------------------------------------
