@@ -14,18 +14,6 @@ from statistics import mean, median
 QUEUE_TIMES_PORTAVENTURA_ID = 19
 QUEUE_TIMES_FERRARI_ID = 277
 
-PARKQUEUETIMES_API_KEY = os.environ.get(
-    "PARK_QUEUE_TIMES_API_KEY",
-    ""
-).strip()
-
-PARKQUEUETIMES_BASE_URL = (
-    "https://api.parkqueuetimes.com/v1"
-)
-
-PARKQUEUETIMES_PORTAVENTURA_ID = 87
-PARKQUEUETIMES_FERRARI_ID = 88
-
 CSV_FILE = "data/queue_history.csv"
 
 MADRID_TZ = ZoneInfo("Europe/Madrid")
@@ -420,13 +408,6 @@ def get_crowd_forecast(
         f"{park_name}..."
     )
 
-    # Queue-Times utiliza el calendario mensual:
-    #
-    # https://queue-times.com/parks/19/calendar/2026/08
-    #
-    # NO:
-    # /calendar/2026/08/12
-
     url = (
         f"https://queue-times.com/parks/"
         f"{park_id}/calendar/"
@@ -448,21 +429,19 @@ def get_crowd_forecast(
 
         import re
 
-        # ----------------------------------------------------
-        # Buscar el día concreto y su porcentaje.
-        #
-        # Ejemplo del HTML:
-        #
-        # 12 ... 81%*
-        #
-        # ----------------------------------------------------
-
         day = date_madrid.day
 
+        # ----------------------------------------------------
+        # Buscar el día concreto en el calendario
+        # y obtener el porcentaje asociado.
+        # ----------------------------------------------------
+
         pattern = (
-            rf"\b{day}\b"
-            rf"(?:(?!\b{day + 1}\b).)*?"
-            rf"(\d+)%"
+            rf"(?:^|[>\s])"
+            rf"{day}"
+            rf"(?:\s|<)"
+            rf".{{0,500}}?"
+            rf"(\d{{1,3}})%"
         )
 
         match = re.search(
@@ -511,6 +490,7 @@ def get_crowd_forecast(
         )
 
         return None
+
 
 # ============================================================
 # ESTADÍSTICAS
