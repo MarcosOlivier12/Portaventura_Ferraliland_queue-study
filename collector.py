@@ -564,18 +564,19 @@ def get_crowd_forecast(
 
         return None
 
-    # ParkQueueTimes espera YYYY-MM.
     month_madrid = str(
         date_madrid
     )[:7]
 
     print(
-    f"DEBUG {park_name}: fecha solicitada = {date_madrid}"
+        f"DEBUG {park_name}: fecha solicitada = "
+        f"{date_madrid}"
     )
 
     print(
-    f"DEBUG {park_name}: mes enviado a API = {month_madrid}"
-    ) 
+        f"DEBUG {park_name}: mes enviado a API = "
+        f"{month_madrid}"
+    )
 
     url = (
         f"{PARKQUEUETIMES_BASE_URL}/"
@@ -611,35 +612,26 @@ def get_crowd_forecast(
                 f"{response.status_code}"
             )
 
-            try:
-
-                print(
-                    "Respuesta servidor:",
-                    response.json()
-                )
-
-            except ValueError:
-
-                print(
-                    "Respuesta servidor:",
-                    response.text
-                )
+            print(
+                "Respuesta servidor:",
+                response.text
+            )
 
             return None
 
         data = response.json()
 
-    print(
-        f"DEBUG RESPUESTA COMPLETA {park_name}:"
-    )
+        print(
+            f"DEBUG RESPUESTA COMPLETA {park_name}:"
+        )
 
-    print(data)
+        print(data)
 
-    return extract_crowd_forecast(
-        data,
-        park_name,
-        date_madrid
-    )
+        return extract_crowd_forecast(
+            data,
+            park_name,
+            date_madrid
+        )
 
     except requests.RequestException as error:
 
