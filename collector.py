@@ -412,7 +412,7 @@ def get_crowd_forecast(
 ):
     """
     Obtiene la predicción de afluencia de Queue-Times
-    para la fecha exacta solicitada.
+    desde el calendario mensual.
     """
 
     print(
@@ -420,16 +420,18 @@ def get_crowd_forecast(
         f"{park_name}..."
     )
 
-    # Queue-Times utiliza:
-    # PortAventura = 19
-    # Ferrari Land = 277
+    # Queue-Times utiliza el calendario mensual:
+    #
+    # https://queue-times.com/parks/19/calendar/2026/08
+    #
+    # NO:
+    # /calendar/2026/08/12
 
     url = (
         f"https://queue-times.com/parks/"
         f"{park_id}/calendar/"
         f"{date_madrid.year}/"
-        f"{date_madrid.month:02d}/"
-        f"{date_madrid.day:02d}"
+        f"{date_madrid.month:02d}"
     )
 
     try:
@@ -444,41 +446,29 @@ def get_crowd_forecast(
 
         html = response.text
 
-        # ----------------------------------------------------
-        # Buscar "Crowd level XX%" dentro de la página
-        # ----------------------------------------------------
-
         import re
 
-        match = re.search(
-            r"Crowd level\s+(\d+)%",
-            html,
-            re.IGNORECASE
+        # ----------------------------------------------------
+        # Buscar el día concreto y su porcentaje.
+        #
+        # Ejemplo del HTML:
+        #
+        # 12 ... 81%*
+        #
+        # ----------------------------------------------------
+
+        day = date_madrid.day
+
+        pattern = (
+            rf"\b{day}\b"
+            rf"(?:(?!\b{day + 1}\b).)*?"
+            rf"(\d+)%"
         )
 
-        if match:
-
-            crowd = float(
-                match.group(1)
-            )
-
-            print(
-                f"Afluencia encontrada "
-                f"{park_name}: "
-                f"{crowd:.0f}%"
-            )
-
-            return crowd
-
-        # ----------------------------------------------------
-        # Si no encuentra el texto anterior, buscar
-        # cualquier referencia al nivel de multitud.
-        # ----------------------------------------------------
-
         match = re.search(
-            r"crowd[^0-9]{0,50}(\d+)%",
+            pattern,
             html,
-            re.IGNORECASE
+            re.IGNORECASE | re.DOTALL
         )
 
         if match:
@@ -496,10 +486,8 @@ def get_crowd_forecast(
             return crowd
 
         print(
-            f"ERROR: no se encontró el nivel de "
-            f"afluencia de Queue-Times para "
-            f"{park_name} "
-            f"({date_madrid})"
+            f"ERROR: no se encontró la afluencia "
+            f"para {date_madrid} en Queue-Times"
         )
 
         return None
@@ -523,8 +511,6 @@ def get_crowd_forecast(
         )
 
         return None
-
-
 
 # ============================================================
 # ESTADÍSTICAS
@@ -739,21 +725,6 @@ def collect():
         "Horario Ferrari Land: 17:00 - 22:00"
     )
 
-    # --------------------------------------------------------
-    # FUERA DEL HORARIO
-    # --------------------------------------------------------
-
-    if not portaventura_open:
-
-        print(
-            "PortAventura está cerrado."
-        )
-
-        print(
-            "No se realiza recopilación."
-        )
-
-        return []
 
     # --------------------------------------------------------
     # QUEUE-TIMES
@@ -778,15 +749,15 @@ def collect():
     # --------------------------------------------------------
 
     port_forecast = get_crowd_forecast(
-        PARKQUEUETIMES_PORTAVENTURA_ID,
-        "PortAventura",
-        date_madrid
+    QUEUE_TIMES_PORTAVENTURA_ID,
+    "PortAventura",
+    date_madrid
     )
 
     ferrari_forecast = get_crowd_forecast(
-        PARKQUEUETIMES_FERRARI_ID,
-        "Ferrari Land",
-        date_madrid
+    QUEUE_TIMES_FERRARI_ID,
+    "Ferrari Land",
+    date_madrid
     )
 
     print(
