@@ -405,249 +405,110 @@ def find_ride(source, config):
 # PREDICCIÓN DE AFLUENCIA
 # ============================================================
 
-def extract_crowd_forecast(
-    data,
-    park_name,
-    date_madrid
-):
-    """
-    Extrae la predicción exacta del día solicitado.
-
-    Respuesta esperada de ParkQueueTimes:
-
-    {
-        "success": true,
-        "data": {
-            "days": [
-                {
-                    "date": "2026-08-11",
-                    "crowdPercent": 44
-                }
-            ]
-        }
-    }
-    """
-
-    if not isinstance(data, dict):
-        print(
-            f"Respuesta inválida de ParkQueueTimes "
-            f"para {park_name}"
-        )
-        return None
-
-    if data.get("success") is False:
-
-        print(
-            f"ParkQueueTimes devolvió success=false "
-            f"para {park_name}: "
-            f"{data.get('error')}"
-        )
-
-        return None
-
-    payload = data.get(
-        "data",
-        {}
-    )
-
-    if not isinstance(payload, dict):
-        print(
-            f"Estructura 'data' inválida para "
-            f"{park_name}"
-        )
-        return None
-
-    days = payload.get(
-        "days",
-        []
-    )
-
-    if not isinstance(days, list):
-
-        print(
-            f"No existe una lista 'days' válida "
-            f"para {park_name}"
-        )
-
-        return None
-
-    target_date = date_madrid
-
-    for day in days:
-
-        if not isinstance(day, dict):
-            continue
-
-        day_date = day.get(
-            "date"
-        )
-
-        if str(day_date) != target_date:
-            continue
-
-        crowd = day.get(
-            "crowdPercent"
-        )
-
-        if crowd is None:
-
-            print(
-                f"ParkQueueTimes no tiene "
-                f"predicción para "
-                f"{park_name} el "
-                f"{target_date}"
-            )
-
-            return None
-
-        try:
-
-            crowd = float(crowd)
-
-        except (
-            TypeError,
-            ValueError
-        ):
-
-            print(
-                f"crowdPercent inválido para "
-                f"{park_name}: {crowd}"
-            )
-
-            return None
-
-        crowd = max(
-            0.0,
-            min(
-                crowd,
-                100.0
-            )
-        )
-
-        print(
-            f"Afluencia encontrada "
-            f"{park_name}: "
-            f"{crowd:.0f}%"
-        )
-
-        return round(
-            crowd,
-            1
-        )
-
-    print(
-        f"No se encontró la fecha "
-        f"{target_date} en el calendario "
-        f"de {park_name}"
-    )
-
-    return None
-
-
 def get_crowd_forecast(
     park_id,
     park_name,
     date_madrid
 ):
+    """
+    Obtiene la predicción de afluencia de Queue-Times
+    para la fecha exacta solicitada.
+    """
 
     print(
         f"Consultando predicción de afluencia "
         f"{park_name}..."
     )
 
-    if not PARKQUEUETIMES_API_KEY:
-
-        print(
-            "ERROR: PARK_QUEUE_TIMES_API_KEY "
-            "no está configurada."
-        )
-
-        return None
-
-    month_madrid = str(
-        date_madrid
-    )[:7]
-
-    print(
-        f"DEBUG {park_name}: fecha solicitada = "
-        f"{date_madrid}"
-    )
-
-    print(
-        f"DEBUG {park_name}: mes enviado a API = "
-        f"{month_madrid}"
-    )
+    # Queue-Times utiliza estos IDs:
+    # PortAventura = 19
+    # Ferrari Land = 277
 
     url = (
-        f"{PARKQUEUETIMES_BASE_URL}/"
-        f"parks/{park_id}/calendar"
+        f"https://queue-times.com/parks/"
+        f"{park_id}/calendar/"
+        f"{date_madrid.year}/"
+        f"{date_madrid.month:02d}/"
+        f"{date_madrid.day:02d}"
     )
-
-    headers = {
-        "x-api-key": PARKQUEUETIMES_API_KEY,
-        "Accept": "application/json",
-        "User-Agent": (
-            "PortAventura-Queue-Study/1.0"
-        ),
-    }
-
-    params = {
-        "date": month_madrid
-    }
 
     try:
 
         response = requests.get(
             url,
-            headers=headers,
-            params=params,
+            headers=QUEUE_TIMES_HEADERS,
             timeout=30
         )
 
-        if not response.ok:
+        response.raise_for_status()
 
-            print(
-                f"ERROR HTTP obteniendo "
-                f"afluencia {park_name}: "
-                f"{response.status_code}"
+        html = response.text
+
+        # ----------------------------------------------------
+        # Buscar "Crowd level XX%" dentro de la página
+        # ----------------------------------------------------
+
+        import re
+
+        match = re.search(
+            r"Crowd level\s+(\d+)%",
+            html,
+            re.IGNORECASE
+        )
+
+        if match:
+
+            crowd = float(
+                match.group(1)
             )
 
             print(
-                "Respuesta servidor:",
-                response.text
+                f"Afluencia encontrada "
+                f"{park_name}: "
+                f"{crowd:.0f}%"
             )
 
-            return None
+            return crowd
 
-        data = response.json()
+        # ----------------------------------------------------
+        # Si no encuentra el texto anterior, buscar
+        # cualquier referencia al nivel de multitud.
+        # ----------------------------------------------------
 
-        print(
-            f"DEBUG RESPUESTA COMPLETA {park_name}:"
+        match = re.search(
+            r"crowd[^0-9]{0,50}(\d+)%",
+            html,
+            re.IGNORECASE
         )
 
-        print(data)
+        if match:
 
-        return extract_crowd_forecast(
-            data,
-            park_name,
-            date_madrid
-        )
+            crowd = float(
+                match.group(1)
+            )
 
-    except requests.RequestException as error:
+            print(
+                f"Afluencia encontrada "
+                f"{park_name}: "
+                f"{crowd:.0f}%"
+            )
+
+            return crowd
 
         print(
-            f"ERROR HTTP obteniendo "
-            f"afluencia {park_name}:",
-            error
+            f"ERROR: no se encontró el nivel de "
+            f"afluencia de Queue-Times para "
+            f"{park_name} "
+            f"({date_madrid})"
         )
 
         return None
 
-    except ValueError as error:
+    except requests.RequestException as error:
 
         print(
-            f"ERROR JSON obteniendo "
-            f"afluencia {park_name}:",
+            f"ERROR HTTP obteniendo afluencia "
+            f"{park_name}:",
             error
         )
 
@@ -656,12 +517,13 @@ def get_crowd_forecast(
     except Exception as error:
 
         print(
-            f"ERROR obteniendo "
-            f"afluencia {park_name}:",
+            f"ERROR obteniendo afluencia "
+            f"{park_name}:",
             error
         )
 
         return None
+
 
 
 # ============================================================
