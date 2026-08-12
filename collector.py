@@ -779,17 +779,18 @@ def collect():
     # AFLUENCIA POR PARQUE
     # --------------------------------------------------------
 
-    port_forecast = get_crowd_forecast(
-        PARKQUEUETIMES_PORTAVENTURA_ID,
-        "PortAventura",
-        date_madrid
-    )
+    
+  port_forecast = get_crowd_forecast(
+     QUEUE_TIMES_PORTAVENTURA_ID,
+     "PortAventura",
+     now_madrid.date()
+ )
 
-    ferrari_forecast = get_crowd_forecast(
-        PARKQUEUETIMES_FERRARI_ID,
-        "Ferrari Land",
-        date_madrid
-    )
+ ferrari_forecast = get_crowd_forecast(
+     QUEUE_TIMES_FERRARI_ID,
+     "Ferrari Land",
+    now_madrid.date()
+ )
 
     print(
         "Predicción afluencia PortAventura:",
