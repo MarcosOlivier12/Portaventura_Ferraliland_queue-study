@@ -424,12 +424,12 @@ def get_crowd_forecast(
     # PortAventura = 19
     # Ferrari Land = 277
 
-    url = (
+        url = (
         f"https://queue-times.com/parks/"
         f"{park_id}/calendar/"
         f"{str(date_madrid)[:4]}/"
-        int(str(date_madrid)[5:7])
-        f"{date_madrid.day:02d}"
+        f"{str(date_madrid)[5:7]}/"
+        f"{str(date_madrid)[8:10]}"
     )
 
     try:
