@@ -471,9 +471,7 @@ def extract_crowd_forecast(
 
         return None
 
-    target_date = str(
-        date_madrid
-    )
+    target_date = date_madrid
 
     for day in days:
 
@@ -570,6 +568,14 @@ def get_crowd_forecast(
     month_madrid = str(
         date_madrid
     )[:7]
+
+    print(
+    f"DEBUG {park_name}: fecha solicitada = {date_madrid}"
+    )
+
+    print(
+    f"DEBUG {park_name}: mes enviado a API = {month_madrid}"
+    ) 
 
     url = (
         f"{PARKQUEUETIMES_BASE_URL}/"
