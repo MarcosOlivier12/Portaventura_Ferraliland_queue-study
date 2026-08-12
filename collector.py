@@ -629,17 +629,17 @@ def get_crowd_forecast(
 
         data = response.json()
 
-print(
-    f"DEBUG RESPUESTA COMPLETA {park_name}:"
-)
+    print(
+        f"DEBUG RESPUESTA COMPLETA {park_name}:"
+    )
 
-print(data)
+    print(data)
 
-return extract_crowd_forecast(
-    data,
-    park_name,
-    date_madrid
-)
+    return extract_crowd_forecast(
+        data,
+        park_name,
+        date_madrid
+    )
 
     except requests.RequestException as error:
 
