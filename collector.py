@@ -680,9 +680,7 @@ def collect():
         now_madrid.isoformat()
     )
 
-    date_madrid = (
-        now_madrid.date().isoformat()
-    )
+    date_madrid = now_madrid.date()
 
     current_time = (
         now_madrid.time()
