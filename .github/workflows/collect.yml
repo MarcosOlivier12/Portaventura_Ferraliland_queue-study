@@ -4,7 +4,7 @@ on:
   schedule:
     # GitHub usa UTC.
     # 08:30 UTC = 10:30 hora Madrid en horario de verano.
-    - cron: "30 6 * * *"
+    - cron: "30 4 * * *"
 
   workflow_dispatch:
 
