@@ -59,7 +59,6 @@ jobs:
 
           TZ = ZoneInfo("Europe/Madrid")
 
-          OPENING = 10 * 60 + 30
           CLOSING = 23 * 60 + 30
 
           def current_minutes():
@@ -94,23 +93,6 @@ jobs:
                   )
               )
 
-              # ==================================================
-              # ANTES DE LAS 10:30
-              # ==================================================
-
-              if current < OPENING:
-
-                  print(
-                      "Todavía no son las 10:30."
-                  )
-
-                  print(
-                      "Esperando..."
-                  )
-
-                  time.sleep(30)
-
-                  continue
 
               # ==================================================
               # DESPUÉS DE LAS 23:30
